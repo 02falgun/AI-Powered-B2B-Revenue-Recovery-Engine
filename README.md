@@ -11,6 +11,8 @@ RecoverAI is a financial-adjacent B2B revenue recovery system designed to analyz
 - **Strict TypeScript & Fail-Closed Design**: Fully strict mode (`"noImplicitAny"`, `"strictNullChecks"`, `"noUnusedLocals"`). Any malformed request, missing signature, or API error fails closed safely without money movement.
 - **Single Responsibility Modules**: Pure logic functions separated from external client SDKs.
 - **Decoupled Result Type Pattern**: External integration functions return explicit `Result<T, AppError>` types instead of throwing uncaught exceptions.
+- **AI Extraction & Prompt Injection Defenses**: Buyer email bodies are treated as untrusted `DATA`, never commands to follow.
+- **Deterministic Percentage Math**: Percentage commitments (e.g., "50% today") are resolved deterministically in backend code rather than by the LLM.
 - **Secure Webhook Verification**: Razorpay webhooks are validated using HMAC SHA256 signature verification with `crypto.timingSafeEqual` to prevent timing attacks.
 
 ---
@@ -19,6 +21,7 @@ RecoverAI is a financial-adjacent B2B revenue recovery system designed to analyz
 
 - **Framework**: Next.js 15 App Router (`src/` directory layout)
 - **Language**: TypeScript (Strict Mode enabled)
+- **AI & Intent Extraction**: OpenAI `gpt-4o-mini` Structured Outputs (`zodResponseFormat`)
 - **Database**: Supabase PostgreSQL with `@supabase/ssr` client helpers
 - **Payment Gateway**: Razorpay (Test Mode Payment Links API)
 - **Validation & Code Quality**: Zod, ESLint, Prettier
@@ -36,6 +39,9 @@ RecoverAI is a financial-adjacent B2B revenue recovery system designed to analyz
 │   │               └── route.ts         # HMAC signature verification endpoint (Phase 0)
 │   ├── lib/
 │   │   ├── types.ts                     # Shared domain types & Result<T, E> pattern
+│   │   ├── ai-prompt.ts                 # System prompt & prompt injection defenses
+│   │   ├── ai-schema.ts                 # Zod extraction schema & server-side sanitizer
+│   │   ├── ai.ts                        # OpenAI Structured Output extraction module
 │   │   ├── razorpay.ts                  # Encapsulated Razorpay payment link module
 │   │   └── razorpay-webhook.ts          # Pure HMAC signature verification helper
 │   ├── utils/
@@ -48,6 +54,9 @@ RecoverAI is a financial-adjacent B2B revenue recovery system designed to analyz
 │   ├── schema.sql                       # DDL for invoices & audit_logs tables
 │   └── seed.sql                         # Seed data: 5 realistic overdue invoices
 ├── scripts/
+│   ├── fixtures/
+│   │   └── test-emails.ts               # 10 B2B buyer email evaluation test cases
+│   ├── test-extraction.ts               # AI extraction evaluation runner
 │   ├── test-razorpay.ts                 # Dev verification script for Razorpay credentials
 │   └── test-webhook.ts                  # Unit test runner for HMAC signature verification
 └── .env.example                         # Environment variable template
@@ -92,36 +101,36 @@ RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
 
 ## 🧪 Verification & Testing
 
-### 1. Run Unit Tests
+### 1. Run Full Test Suite
 ```bash
 npm run test
 ```
-Runs unit tests for HMAC SHA256 webhook signature verification and Razorpay module fail-closed error handling.
+Runs unit tests for HMAC SHA256 webhook signature verification, Razorpay module error handling, and AI intent extraction on 10 email fixtures.
 
-### 2. Run TypeScript Compilation Check
+### 2. Run AI Intent Extraction Evaluation Suite
+```bash
+npm run test:ai
+```
+
+### 3. Run TypeScript Compilation Check
 ```bash
 npx tsc --noEmit
 ```
 
-### 3. Run Linting & Prettier Formatting
+### 4. Run Linting & Prettier Formatting
 ```bash
 npm run lint
-npx prettier --check "src/**/*.{ts,tsx}" "utils/**/*.{ts,tsx}"
+npx prettier --check "src/**/*.{ts,tsx}" "scripts/**/*.ts"
 ```
 
-### 4. Start Development Server
+### 5. Start Development Server
 ```bash
 npm run dev
 ```
 
 ---
 
-## 📌 Phase 0 Scope Summary
+## 📌 Phase Progress Summary
 
-- [x] Next.js App Router scaffold + strict TypeScript + Prettier/ESLint.
-- [x] `.env.example` and safe `.gitignore` setup.
-- [x] Supabase DDL schema & seed data (integer paise money math).
-- [x] `@supabase/ssr` client helpers & session refresh middleware.
-- [x] `lib/razorpay.ts` payment link helper with `Result` error pattern.
-- [x] `app/api/webhook/razorpay/route.ts` signature verification endpoint.
-- [x] Unit test suite passing 100%.
+- [x] **Phase 0**: Project scaffold, strict TypeScript, Supabase DDL & seed scripts, Razorpay payment link client, HMAC webhook signature route.
+- [x] **Phase 1**: AI Intent Extraction Layer, prompt injection defenses, Zod Structured Outputs schema, percentage math resolution, 10 evaluation email fixtures.

@@ -7,14 +7,16 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx scripts/test-webhook.ts && tsx scripts/test-razorpay.ts",
+    "test": "tsx scripts/test-webhook.ts && tsx scripts/test-razorpay.ts && tsx scripts/test-extraction.ts",
     "test:webhook": "tsx scripts/test-webhook.ts",
-    "test:razorpay": "tsx scripts/test-razorpay.ts"
+    "test:razorpay": "tsx scripts/test-razorpay.ts",
+    "test:ai": "tsx scripts/test-extraction.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "next": "16.3.1",
+    "openai": "^7.5.0",
     "razorpay": "^2.9.8",
     "react": "19.2.8",
     "react-dom": "19.2.8",
