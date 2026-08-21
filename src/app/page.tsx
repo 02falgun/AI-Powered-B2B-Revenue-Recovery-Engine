@@ -1,69 +1,179 @@
-import Image from 'next/image';
+'use client';
 
-export default function Home() {
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+
+interface InvoiceItem {
+  readonly id: string;
+  readonly invoiceNumber: string;
+  readonly customerName: string;
+  readonly customerEmail: string;
+  readonly totalAmountPaise: number;
+  readonly outstandingAmountPaise: number;
+  readonly currency: string;
+  readonly status: string;
+  readonly dueDate: string;
+}
+
+export default function InvoicesPage() {
+  const [invoices, setInvoices] = useState<ReadonlyArray<InvoiceItem>>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchInvoices() {
+      try {
+        const res = await fetch('/api/invoices');
+        const data = await res.json();
+        if (data.success && Array.isArray(data.invoices)) {
+          setInvoices(data.invoices);
+        } else {
+          setError(data.error?.message ?? 'Failed to load invoices');
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Error fetching invoices');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchInvoices();
+  }, []);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{' '}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{' '}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{' '}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{' '}
-            or the{' '}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{' '}
-            center.
-          </p>
+    <div className="min-h-screen bg-slate-950 text-slate-50 p-6 md:p-12 font-sans">
+      <div className="max-w-6xl mx-auto space-y-8">
+        {/* Top Navigation / Header */}
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-slate-800 gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></span>
+              <h1 className="text-3xl font-bold tracking-tight text-white">RecoverAI</h1>
+            </div>
+            <p className="text-sm text-slate-400 mt-1">
+              Autonomous B2B Revenue Recovery Engine — Financial Control Portal
+            </p>
+          </div>
+          <div className="flex items-center gap-3 bg-slate-900 px-4 py-2 rounded-lg border border-slate-800 text-xs text-slate-300">
+            <span>Security Mode:</span>
+            <span className="font-semibold text-emerald-400">Strict Policy Invariant Active</span>
+          </div>
+        </header>
+
+        {/* Overview Banner */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-1">
+            <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">
+              System Status
+            </span>
+            <p className="text-xl font-semibold text-emerald-400">
+              Phase 3 — Core Orchestration Live
+            </p>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-1">
+            <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">
+              Policy Engine
+            </span>
+            <p className="text-xl font-semibold text-indigo-400">Sole AUTO_RECOVER Authority</p>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-1">
+            <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">
+              Money Math Standard
+            </span>
+            <p className="text-xl font-semibold text-amber-400">Integer Paise Exact Arithmetic</p>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Invoices List Table */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Overdue Invoices</h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Select an invoice to process buyer email payment intent
+              </p>
+            </div>
+            <span className="text-xs font-mono bg-slate-800 text-slate-300 px-2.5 py-1 rounded">
+              {invoices.length} Invoices Found
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="p-12 text-center text-slate-400 text-sm">
+              Loading overdue invoices...
+            </div>
+          ) : error ? (
+            <div className="p-12 text-center text-red-400 text-sm">Error: {error}</div>
+          ) : invoices.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 text-sm">
+              No overdue invoices found.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-300">
+                <thead className="bg-slate-950/50 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="px-6 py-3.5">Invoice #</th>
+                    <th className="px-6 py-3.5">Customer</th>
+                    <th className="px-6 py-3.5">Total Amount</th>
+                    <th className="px-6 py-3.5">Outstanding Balance</th>
+                    <th className="px-6 py-3.5">Status</th>
+                    <th className="px-6 py-3.5">Due Date</th>
+                    <th className="px-6 py-3.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {invoices.map((inv) => {
+                    const outstandingInr = (inv.outstandingAmountPaise / 100).toFixed(2);
+                    const totalInr = (inv.totalAmountPaise / 100).toFixed(2);
+
+                    return (
+                      <tr key={inv.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="px-6 py-4 font-mono font-medium text-white">
+                          {inv.invoiceNumber}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-slate-200">{inv.customerName}</div>
+                          <div className="text-xs text-slate-400">{inv.customerEmail}</div>
+                        </td>
+                        <td className="px-6 py-4 font-mono text-slate-400">₹{totalInr}</td>
+                        <td className="px-6 py-4 font-mono font-semibold text-emerald-400">
+                          ₹{outstandingInr}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
+                              inv.status === 'overdue'
+                                ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                : inv.status === 'paid'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            }`}
+                          >
+                            {inv.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-xs text-slate-400 font-mono">
+                          {new Date(inv.dueDate).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <Link
+                            href={`/invoices/${inv.id}`}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition-colors shadow-sm"
+                          >
+                            <span>Process Recovery Email</span>
+                            <span>&rarr;</span>
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      </main>
+      </div>
     </div>
   );
 }
