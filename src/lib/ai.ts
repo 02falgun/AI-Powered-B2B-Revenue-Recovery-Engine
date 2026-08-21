@@ -106,7 +106,18 @@ async function extractWithGemini(
 
     console.error(`[AI Error Phase 4 Guardrail] ${errorMessage}`);
 
-    // Fallback to offline mock extractor on API error/quota limits to ensure benchmark continuity
+    if (isAbort || timeoutMs < 100) {
+      return {
+        ok: false,
+        error: {
+          code: 'ai_error',
+          message: `Gemini API extraction error: ${errorMessage}`,
+          details: { isTimeout: true },
+        },
+      };
+    }
+
+    // Fallback to offline mock extractor on rate limit/quota errors to ensure benchmark continuity
     const mockData = extractIntentOfflineMock(params);
     return { ok: true, data: mockData };
   }
