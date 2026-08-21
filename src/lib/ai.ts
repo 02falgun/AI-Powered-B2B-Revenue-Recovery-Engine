@@ -15,11 +15,38 @@ export interface ExtractIntentParams {
 
 const DEFAULT_AI_TIMEOUT_MS = 10000; // 10 seconds strict timeout
 
+function loadEnvLocalIfMissing(): void {
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      const fs = require('fs');
+      const path = require('path');
+      const envPath = path.resolve(process.cwd(), '.env.local');
+      if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf8') as string;
+        for (const line of envContent.split('\n')) {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+            const [key, ...valParts] = trimmed.split('=');
+            const k = key.trim();
+            const v = valParts.join('=').trim();
+            if (k && v && (!process.env[k] || process.env[k]?.includes('sk-mock-key'))) {
+              process.env[k] = v;
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // Ignore in non-Node environments
+  }
+}
+
 /**
  * Encapsulated OpenAI client factory.
  * Fails closed if OPENAI_API_KEY environment variable is missing.
  */
 function getOpenAIClient(): Result<OpenAI, AppError> {
+  loadEnvLocalIfMissing();
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey || apiKey.trim() === '' || apiKey.includes('sk-mock-key')) {
