@@ -30,10 +30,20 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Processed Payments Table (Phase 4 Idempotency Guardrail)
+CREATE TABLE IF NOT EXISTS public.processed_payments (
+    payment_id TEXT PRIMARY KEY,
+    invoice_id UUID NOT NULL REFERENCES public.invoices(id) ON DELETE CASCADE,
+    payment_link_id TEXT,
+    amount_paid_paise BIGINT NOT NULL CHECK (amount_paid_paise >= 0),
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Indexes for performance & query optimization
 CREATE INDEX IF NOT EXISTS idx_invoices_status ON public.invoices(status);
 CREATE INDEX IF NOT EXISTS idx_invoices_customer_email ON public.invoices(customer_email);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_invoice_id ON public.audit_logs(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_processed_payments_invoice_id ON public.processed_payments(invoice_id);
 
 -- Trigger to automatically update updated_at timestamp on invoices
 CREATE OR REPLACE FUNCTION update_updated_at_column()

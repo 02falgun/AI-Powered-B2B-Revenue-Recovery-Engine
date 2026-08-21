@@ -11,16 +11,17 @@ export interface ProcessEmailRequestBody {
 }
 
 /**
- * Core Orchestration API Route — Phase 3.
+ * Core Orchestration API Route — Hardened in Phase 4.
  *
- * Sequence:
+ * Sequence & Reliability Invariants:
  * 1. Input validation.
  * 2. Supabase DB invoice lookup for authoritative outstanding balance.
- * 3. AI intent extraction (lib/ai.ts).
+ * 3. AI intent extraction (lib/ai.ts) with 10s timeout & fail-closed error handling.
  * 4. Deterministic policy evaluation (lib/policy.ts).
  * 5. If AUTO_RECOVER: Razorpay Test Payment Link creation (lib/razorpay.ts).
+ *    - On Razorpay failure: Overrides decision to HUMAN_REVIEW, logs PAYMENT_LINK_FAILED, returns failure.
  * 6. Mandatory audit logging (audit_logs table).
- * 7. Typed JSON response with explicit failure modes.
+ * 7. Typed JSON response with explicit failure modes (validation_error, ai_error, policy_rejected, payment_error).
  */
 export async function POST(request: Request): Promise<NextResponse> {
   let body: ProcessEmailRequestBody;
@@ -123,7 +124,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
   }
 
-  // 2. AI Intent Extraction
+  // 2. AI Intent Extraction (Hardened with timeout & explicit error typing)
   const aiResult = await extractPaymentIntent({
     emailBody: emailText,
     invoiceNumber: invoice.invoiceNumber,
@@ -137,21 +138,42 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (aiResult.ok) {
     extractedIntent = aiResult.data;
   } else {
-    // If AI fails or mock credentials in dev, log warning and use fallback extraction
-    console.warn(
-      `[Orchestration Warning] AI extraction failed (${aiResult.error.message}). Using fallback unknown intent.`,
+    // Phase 4 Requirement 2: Fail closed on AI timeout or extraction error
+    console.error(`[Process Email AI Failure] ${aiResult.error.message}`);
+
+    const failureReason = `AI intent extraction failure: ${aiResult.error.message}. Routed to HUMAN_REVIEW.`;
+
+    const auditResult = await insertAuditLog({
+      invoiceId: invoice.id,
+      action: 'EMAIL_PROCESSING_FAILED',
+      actor: 'RECOVER_AI_ORCHESTRATOR',
+      metadata: {
+        original_email: emailText,
+        policy_decision: 'HUMAN_REVIEW',
+        policy_reason: failureReason,
+        failure_code: 'ai_error',
+        error: aiResult.error,
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    return NextResponse.json(
+      {
+        success: false,
+        failureCode: 'ai_error',
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        customerName: invoice.customerName,
+        outstandingAmountPaise: invoice.outstandingAmountPaise,
+        intent: 'unknown',
+        confidence: 0,
+        decision: 'HUMAN_REVIEW',
+        reason: failureReason,
+        auditLogId: auditResult.ok ? auditResult.data.id : null,
+        error: aiResult.error,
+      },
+      { status: 422 },
     );
-    extractedIntent = {
-      intent: 'unknown',
-      promisedAmountInr: null,
-      promisedAmountPaise: null,
-      promisedDate: null,
-      disputePresent: false,
-      confidence: 0,
-      rationale: `AI extraction error: ${aiResult.error.message}`,
-      evidence: emailText.slice(0, 100),
-      resolvedFromPercentage: false,
-    };
   }
 
   // 3. Deterministic Policy Evaluation (Passing DB Authoritative Amount)
@@ -163,6 +185,8 @@ export async function POST(request: Request): Promise<NextResponse> {
   let paymentLinkId: string | null = null;
   let paymentLinkUrl: string | null = null;
   let paymentError: string | null = null;
+  let finalDecision = policyDecision.decision;
+  let finalReason = policyDecision.reason;
 
   // 4. Razorpay Test Payment Link Creation (If AUTO_RECOVER)
   if (policyDecision.decision === 'AUTO_RECOVER' && policyDecision.approvedAmountPaise) {
@@ -179,9 +203,44 @@ export async function POST(request: Request): Promise<NextResponse> {
       paymentLinkId = paymentLinkResult.data.paymentLinkId;
       paymentLinkUrl = paymentLinkResult.data.shortUrl;
     } else {
+      // Phase 4 Requirement 3: Handle Razorpay failure cleanly
       paymentError = paymentLinkResult.error.message;
-      console.warn(
-        `[Orchestration Warning] Razorpay payment link creation failed: ${paymentError}`,
+      finalDecision = 'HUMAN_REVIEW';
+      finalReason = `Payment link creation failed after policy approval: ${paymentError}`;
+
+      console.error(`[Process Email Razorpay Failure] ${finalReason}`);
+
+      const auditResult = await insertAuditLog({
+        invoiceId: invoice.id,
+        action: 'PAYMENT_LINK_FAILED',
+        actor: 'RECOVER_AI_ORCHESTRATOR',
+        metadata: {
+          original_email: emailText,
+          extracted_fields: extractedIntent,
+          policy_decision: 'HUMAN_REVIEW',
+          policy_reason: finalReason,
+          payment_error: paymentError,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          failureCode: 'payment_error',
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          customerName: invoice.customerName,
+          outstandingAmountPaise: invoice.outstandingAmountPaise,
+          intent: extractedIntent.intent,
+          confidence: extractedIntent.confidence,
+          decision: 'HUMAN_REVIEW',
+          reason: finalReason,
+          paymentError,
+          auditLogId: auditResult.ok ? auditResult.data.id : null,
+          error: { code: 'payment_error', message: paymentError },
+        },
+        { status: 500 },
       );
     }
   }
@@ -190,8 +249,8 @@ export async function POST(request: Request): Promise<NextResponse> {
   const auditMetadata = {
     original_email: emailText,
     extracted_fields: extractedIntent,
-    policy_decision: policyDecision.decision,
-    policy_reason: policyDecision.reason,
+    policy_decision: finalDecision,
+    policy_reason: finalReason,
     guardrail_triggered: policyDecision.guardrailTriggered ?? null,
     approved_amount_paise: policyDecision.approvedAmountPaise,
     approved_amount_inr: policyDecision.approvedAmountInr,
@@ -222,8 +281,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     confidence: extractedIntent.confidence,
     rationale: extractedIntent.rationale,
     evidence: extractedIntent.evidence,
-    decision: policyDecision.decision,
-    reason: policyDecision.reason,
+    decision: finalDecision,
+    reason: finalReason,
     guardrailTriggered: policyDecision.guardrailTriggered ?? null,
     approvedAmountPaise: policyDecision.approvedAmountPaise,
     approvedAmountInr: policyDecision.approvedAmountInr,

@@ -10,7 +10,10 @@ export interface ExtractIntentParams {
   readonly customerName: string;
   readonly outstandingAmountPaise: number;
   readonly dueDate: string;
+  readonly timeoutMs?: number;
 }
+
+const DEFAULT_AI_TIMEOUT_MS = 10000; // 10 seconds strict timeout
 
 /**
  * Encapsulated OpenAI client factory.
@@ -46,13 +49,7 @@ function getOpenAIClient(): Result<OpenAI, AppError> {
 
 /**
  * Extracts payment intent from buyer email text using OpenAI gpt-4o-mini Structured Outputs.
- *
- * Security & Reliability rules:
- * 1. Invoice facts are injected as authoritative context.
- * 2. Buyer email body is isolated as raw data (prompt injection defense).
- * 3. Structured outputs enforce JSON schema compliance.
- * 4. Server-side post-processing re-validates types and deterministically resolves percentage commitments.
- * 5. Fail-closed error handling returns explicit Result<ExtractedIntent, AppError>.
+ * Hardened in Phase 4 with strict timeout, AbortSignal, and fail-closed error handling.
  */
 export async function extractPaymentIntent(
   params: ExtractIntentParams,
@@ -85,6 +82,7 @@ export async function extractPaymentIntent(
 
   const openai = clientResult.data;
   const outstandingAmountInr = (params.outstandingAmountPaise / 100).toFixed(2);
+  const timeoutMs = params.timeoutMs ?? DEFAULT_AI_TIMEOUT_MS;
 
   const userPrompt = `
 AUTHORITATIVE INVOICE FACTS FROM BACKEND SYSTEM:
@@ -99,16 +97,26 @@ ${params.emailBody}
 """
 `.trim();
 
+  // Phase 4 Strict Timeout Handling
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const completion = await openai.chat.completions.parse({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
-      ],
-      response_format: zodResponseFormat(ExtractionSchema, 'intent_extraction'),
-      temperature: 0.1, // Low temperature for deterministic behavior
-    });
+    const completionPromise = openai.chat.completions.parse(
+      {
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: zodResponseFormat(ExtractionSchema, 'intent_extraction'),
+        temperature: 0.1,
+      },
+      { signal: controller.signal },
+    );
+
+    const completion = await completionPromise;
+    clearTimeout(timeoutId);
 
     const message = completion.choices[0]?.message;
 
@@ -135,13 +143,26 @@ ${params.emailBody}
     // Re-validate and sanitize LLM output server-side
     return validateAndSanitizeExtraction(message.parsed, params.outstandingAmountPaise);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown OpenAI extraction error';
+    clearTimeout(timeoutId);
+    const isAbort =
+      (err instanceof Error && err.name === 'AbortError') ||
+      String(err).toLowerCase().includes('aborted') ||
+      String(err).toLowerCase().includes('timeout');
+
+    const errorMessage = isAbort
+      ? `OpenAI extraction timed out after ${timeoutMs}ms.`
+      : err instanceof Error
+        ? err.message
+        : 'Unknown OpenAI extraction error';
+
+    console.error(`[AI Error Phase 4 Guardrail] ${errorMessage}`);
+
     return {
       ok: false,
       error: {
         code: 'ai_error',
-        message: `AI Extraction failed: ${message}`,
-        details: err instanceof Error ? { name: err.name, stack: err.stack } : { err },
+        message: errorMessage,
+        details: { isTimeout: isAbort },
       },
     };
   }
