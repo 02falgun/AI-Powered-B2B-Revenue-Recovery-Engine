@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx scripts/test-webhook.ts && tsx scripts/test-razorpay.ts && tsx scripts/test-extraction.ts && tsx scripts/test-policy.ts && tsx scripts/test-orchestration.ts && tsx scripts/test-razorpay-checkout.ts && tsx tests/integration/phase4-reliability.test.ts && tsx scripts/test-phase5-ui.ts && tsx tests/integration/phase6-adversarial.test.ts",
+    "test": "tsx scripts/test-webhook.ts && tsx scripts/test-razorpay.ts && tsx scripts/test-extraction.ts && tsx scripts/test-policy.ts && tsx scripts/test-orchestration.ts && tsx scripts/test-razorpay-checkout.ts && tsx tests/integration/phase4-reliability.test.ts && tsx scripts/test-phase5-ui.ts && tsx tests/integration/phase6-adversarial.test.ts && tsx scripts/run-evaluation.ts",
     "test:webhook": "tsx scripts/test-webhook.ts",
     "test:razorpay": "tsx scripts/test-razorpay.ts",
     "test:ai": "tsx scripts/test-extraction.ts",
@@ -16,7 +16,8 @@
     "test:checkout": "tsx scripts/test-razorpay-checkout.ts",
     "test:phase4": "tsx tests/integration/phase4-reliability.test.ts",
     "test:phase5": "tsx scripts/test-phase5-ui.ts",
-    "test:phase6": "tsx tests/integration/phase6-adversarial.test.ts"
+    "test:phase6": "tsx tests/integration/phase6-adversarial.test.ts",
+    "test:eval": "tsx scripts/run-evaluation.ts"
   },
   "dependencies": {
     "@google/genai": "^2.18.0",
