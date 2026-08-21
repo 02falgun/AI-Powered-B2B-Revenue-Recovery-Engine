@@ -18,7 +18,8 @@
     "test:phase5": "tsx scripts/test-phase5-ui.ts",
     "test:phase6": "tsx tests/integration/phase6-adversarial.test.ts",
     "test:eval": "tsx scripts/run-evaluation.ts",
-    "demo:rehearse": "tsx scripts/rehearse-demo.ts"
+    "demo:rehearse": "tsx scripts/rehearse-demo.ts",
+    "test:idempotency": "tsx tests/integration/dual-payment-idempotency.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.18.0",

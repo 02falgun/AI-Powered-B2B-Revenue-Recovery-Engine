@@ -1,8 +1,12 @@
 import { createServerClient } from '@supabase/ssr';
 import { type NextRequest, NextResponse } from 'next/server';
 
+// Middleware-level Supabase client using the service-role key.
+// No auth system is in use; this middleware exists as a session-refresh stub
+// for future auth integration. The anon/publishable key has been intentionally
+// removed to eliminate client-side credential surface area.
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export const updateSession = async (request: NextRequest): Promise<NextResponse> => {
   let supabaseResponse = NextResponse.next({
@@ -32,7 +36,8 @@ export const updateSession = async (request: NextRequest): Promise<NextResponse>
     },
   });
 
-  // Refresh auth token if expired
+  // No-op in the current build (no login system). Retained as the
+  // standard @supabase/ssr session-refresh hook for future auth integration.
   await supabase.auth.getUser();
 
   return supabaseResponse;

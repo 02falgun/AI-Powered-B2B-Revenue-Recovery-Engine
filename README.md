@@ -140,8 +140,9 @@ Dataset: 20 pre-labeled synthetic B2B buyer emails (5 partial-payment, 4 full-pa
 ├── tests/
 │   ├── unit/policy.test.ts               # Policy Decision Matrix + boundary tests
 │   ├── integration/
-│   │   ├── phase4-reliability.test.ts    # 5-scenario negative reliability suite
-│   │   └── phase6-adversarial.test.ts    # 7-scenario adversarial suite
+│   │   ├── phase4-reliability.test.ts         # 5-scenario negative reliability suite
+│   │   ├── phase6-adversarial.test.ts         # 7-scenario adversarial suite
+│   │   └── dual-payment-idempotency.test.ts   # Task 3: both payment paths = one balance update
 │   └── evaluation/dataset.ts            # 20 pre-labeled benchmark fixtures
 ├── supabase/
 │   ├── schema.sql                        # DDL: invoices, audit_logs, processed_payments
@@ -178,18 +179,20 @@ cp .env.example .env.local
 Edit `.env.local`:
 ```env
 # Supabase Configuration
+# The project URL is non-sensitive (public). The anon/publishable key is NOT used
+# — all DB access goes through server-side routes using the service-role key only.
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
 # Google Gemini AI
 GEMINI_API_KEY=your-gemini-api-key
 
 # Razorpay (Test Mode)
+# KEY_ID is public-safe and is sent to the browser only for the checkout modal.
 RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxx
 RAZORPAY_KEY_SECRET=your-razorpay-key-secret
 NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxx
-RAZORPAY_WEBHOOK_SECRET=your-webhook-secret
+RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
 ```
 
 ### 3. Set Up Supabase Database
@@ -201,7 +204,9 @@ RAZORPAY_WEBHOOK_SECRET=your-webhook-secret
 1. Create account at [dashboard.razorpay.com](https://dashboard.razorpay.com)
 2. Switch to **Test Mode** in the dashboard toggle
 3. Navigate to Settings → API Keys → Generate Test Key
-4. For webhook testing: Settings → Webhooks → Add webhook URL (`/api/webhook/razorpay`), select `payment.captured` event
+4. For webhook testing: Settings → Webhooks → Add webhook URL (`/api/webhook/razorpay`)
+   - Enable BOTH events: **`payment_link.paid`** (Payment Links flow) and **`payment.captured`** (Standard Checkout flow)
+   - The webhook handler accepts and processes both events
 5. Copy the webhook secret to `RAZORPAY_WEBHOOK_SECRET` in `.env.local`
 
 **Test Credentials:**
@@ -227,6 +232,7 @@ npm run test:policy        # Policy Decision Matrix (15/15)
 npm run test:phase4        # Reliability & Idempotency (5/5)
 npm run test:phase6        # Adversarial Integration (12/12)
 npm run test:eval          # Phase 7 Benchmark (20 cases, 100% accuracy)
+npm run test:idempotency   # Dual-path idempotency (same payment_id → one balance update)
 npm run demo:rehearse      # Live demo rehearsal (runs twice, verifies determinism)
 ```
 
@@ -273,6 +279,10 @@ All fields are re-validated server-side by Zod before reaching the policy engine
 | **F — Sole Authority** | Architecture invariant — no other code path reaches `AUTO_RECOVER` | (structural) |
 | **G — Authoritative Invoice** | DB-sourced invoice facts override email text claims | (structural) |
 | **H — Currency Ambiguity** | Non-INR currency detected (`USD`, `EUR`, `$`) or percentage > 100% | `HUMAN_REVIEW` |
+
+> **Note on structural security controls:** Two additional safeguards are enforced outside the 8-guardrail policy list — they are architectural invariants, not runtime guardrails:
+> - **Webhook Signature Verification**: `verifyRazorpayWebhookSignature()` (HMAC SHA256 + `crypto.timingSafeEqual`) runs on every webhook event **before** any DB access. This is a transport-layer security control, not a policy guardrail.
+> - **AI-Failure Fail-Closed**: When `extractPaymentIntent()` times out (>10s) or returns malformed output, the orchestrator returns `{ ok: false }` and routes to `HUMAN_REVIEW` before `evaluatePolicy()` is ever called. This is handled at the orchestration layer.
 
 ---
 
@@ -322,9 +332,17 @@ These items are known gaps explicitly deferred, not forgotten:
 ## 🔐 Security Notes
 
 **Secrets handling:**
-- No API key, service-role key, or webhook secret appears in client-side code, `NEXT_PUBLIC_` variables, log lines, or committed files
-- `.env.local` is in `.gitignore`; only `.env.example` (with placeholder values) is committed
-- Razorpay `KEY_SECRET` is server-only; only `NEXT_PUBLIC_RAZORPAY_KEY_ID` is exposed to the browser for the Standard Checkout modal
+- The Supabase anon/publishable key is **not used** — all DB access routes through server-side API handlers using `SUPABASE_SERVICE_ROLE_KEY` only. No anon key is present in `NEXT_PUBLIC_` variables or the client bundle.
+- `NEXT_PUBLIC_SUPABASE_URL` is non-sensitive (a public project URL). `SUPABASE_SERVICE_ROLE_KEY`, `RAZORPAY_KEY_SECRET`, `GEMINI_API_KEY`, and `RAZORPAY_WEBHOOK_SECRET` are server-only and never appear in client code or log lines.
+- `.env.local` is in `.gitignore`; verified never committed (`git log --all --full-history -- .env.local` returns empty).
+- Razorpay `KEY_SECRET` is server-only; only `NEXT_PUBLIC_RAZORPAY_KEY_ID` (the public key ID) is exposed to the browser for the Standard Checkout modal — this is safe per Razorpay's documentation.
+- RLS: Supabase Row Level Security is not enabled on these tables, because the anon/publishable key is not issued or used. The sole access credential is the service-role key, which is held exclusively server-side.
+
+**Dual Payment Flow & Idempotency:**
+- RecoverAI implements two complementary payment flows: **Payment Links** (auto-issued by `process-email` on `AUTO_RECOVER`) and **Standard Checkout** (the modal button). Both are intentional and serve different UX moments.
+- Both flows converge on `updateInvoiceAfterPayment()` in `src/lib/db.ts`, which calls `isPaymentAlreadyProcessed()` as its first step using `razorpay_payment_id` as the key.
+- **Double-credit is architecturally impossible**: if both flows fire for the same `payment_id`, the second call is a verified idempotent no-op. Verified by `npm run test:idempotency`.
+- The webhook handler accepts both `payment_link.paid` and `payment.captured` events — subscribe to both in the Razorpay dashboard.
 
 **Webhook verification:**
 - `verifyRazorpayWebhookSignature()` in `src/lib/razorpay-webhook.ts` uses `crypto.createHmac('sha256')` + `crypto.timingSafeEqual()` on every webhook event
@@ -332,7 +350,7 @@ These items are known gaps explicitly deferred, not forgotten:
 - Duplicate webhook replay protection via `processed_payments.payment_id` unique constraint (idempotent — invoice balance updated exactly once per payment)
 
 **AI output isolation:**
-- Every field extracted from Gemini is re-validated through Zod before policy evaluation
+- Every field extracted from Gemini (`gemini-3.6-flash`) is re-validated through Zod before policy evaluation
 - The system prompt (`src/lib/ai-prompt.ts`) explicitly instructs the model that the email body is untrusted `DATA`, never commands
 - `evaluatePolicy()` does not read `rationale` or `evidence` fields for decision logic — injected text in those fields has zero effect on money movement decisions
 
