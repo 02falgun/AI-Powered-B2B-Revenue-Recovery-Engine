@@ -101,8 +101,13 @@ export function validateAndSanitizeExtraction(
       resolvedFromPercentage = true;
     }
   } else {
-    // Convert INR number to integer paise
-    promisedAmountPaise = Math.round(promisedAmountInr * 100);
+    // Convert INR number to integer paise, treating 0 or non-positive as null
+    if (promisedAmountInr <= 0) {
+      promisedAmountInr = null;
+      promisedAmountPaise = null;
+    } else {
+      promisedAmountPaise = Math.round(promisedAmountInr * 100);
+    }
   }
 
   // Ensure promised amount is non-negative and capped at total outstanding
