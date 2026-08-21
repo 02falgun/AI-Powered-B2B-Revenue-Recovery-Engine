@@ -9,6 +9,8 @@ RecoverAI is a financial-adjacent B2B revenue recovery system designed to analyz
 ## 🏗️ Architecture & Core Principles
 
 - **Strict TypeScript & Fail-Closed Design**: Fully strict mode (`"noImplicitAny"`, `"strictNullChecks"`, `"noUnusedLocals"`). Any malformed request, missing signature, or API error fails closed safely without money movement.
+- **Architectural Policy Invariant**: `evaluatePolicy()` in `src/lib/policy.ts` is the **ONLY function in the codebase** authorized to emit `decision = 'AUTO_RECOVER'`.
+- **Pure Logic Policy Engine**: Zero SDK/HTTP dependencies in `lib/policy.ts`. Zero wall-clock dependence, zero randomness, zero network calls.
 - **Single Responsibility Modules**: Pure logic functions separated from external client SDKs.
 - **Decoupled Result Type Pattern**: External integration functions return explicit `Result<T, AppError>` types instead of throwing uncaught exceptions.
 - **AI Extraction & Prompt Injection Defenses**: Buyer email bodies are treated as untrusted `DATA`, never commands to follow.
@@ -42,6 +44,7 @@ RecoverAI is a financial-adjacent B2B revenue recovery system designed to analyz
 │   │   ├── ai-prompt.ts                 # System prompt & prompt injection defenses
 │   │   ├── ai-schema.ts                 # Zod extraction schema & server-side sanitizer
 │   │   ├── ai.ts                        # OpenAI Structured Output extraction module
+│   │   ├── policy.ts                    # Deterministic Policy Engine (Sole AUTO_RECOVER authority)
 │   │   ├── razorpay.ts                  # Encapsulated Razorpay payment link module
 │   │   └── razorpay-webhook.ts          # Pure HMAC signature verification helper
 │   ├── utils/
@@ -50,6 +53,9 @@ RecoverAI is a financial-adjacent B2B revenue recovery system designed to analyz
 │   │       ├── server.ts                # Server Component client helper (@supabase/ssr)
 │   │       └── middleware.ts            # Auth session refresh middleware helper
 │   └── middleware.ts                    # Root Next.js middleware for session handling
+├── tests/
+│   └── unit/
+│       └── policy.test.ts               # Policy Decision Matrix & Boundary unit test suite
 ├── supabase/
 │   ├── schema.sql                       # DDL for invoices & audit_logs tables
 │   └── seed.sql                         # Seed data: 5 realistic overdue invoices
@@ -57,6 +63,7 @@ RecoverAI is a financial-adjacent B2B revenue recovery system designed to analyz
 │   ├── fixtures/
 │   │   └── test-emails.ts               # 10 B2B buyer email evaluation test cases
 │   ├── test-extraction.ts               # AI extraction evaluation runner
+│   ├── test-policy.ts                   # Policy engine test runner
 │   ├── test-razorpay.ts                 # Dev verification script for Razorpay credentials
 │   └── test-webhook.ts                  # Unit test runner for HMAC signature verification
 └── .env.example                         # Environment variable template
@@ -105,25 +112,30 @@ RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
 ```bash
 npm run test
 ```
-Runs unit tests for HMAC SHA256 webhook signature verification, Razorpay module error handling, and AI intent extraction on 10 email fixtures.
+Runs unit tests for HMAC SHA256 webhook signature verification, Razorpay module error handling, AI intent extraction on 10 email fixtures, and Policy Engine Decision Matrix.
 
-### 2. Run AI Intent Extraction Evaluation Suite
+### 2. Run Policy Engine Decision Matrix Unit Tests
+```bash
+npm run test:policy
+```
+
+### 3. Run AI Intent Extraction Evaluation Suite
 ```bash
 npm run test:ai
 ```
 
-### 3. Run TypeScript Compilation Check
+### 4. Run TypeScript Compilation Check
 ```bash
 npx tsc --noEmit
 ```
 
-### 4. Run Linting & Prettier Formatting
+### 5. Run Linting & Prettier Formatting
 ```bash
 npm run lint
-npx prettier --check "src/**/*.{ts,tsx}" "scripts/**/*.ts"
+npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "scripts/**/*.ts"
 ```
 
-### 5. Start Development Server
+### 6. Start Development Server
 ```bash
 npm run dev
 ```
@@ -134,3 +146,4 @@ npm run dev
 
 - [x] **Phase 0**: Project scaffold, strict TypeScript, Supabase DDL & seed scripts, Razorpay payment link client, HMAC webhook signature route.
 - [x] **Phase 1**: AI Intent Extraction Layer, prompt injection defenses, Zod Structured Outputs schema, percentage math resolution, 10 evaluation email fixtures.
+- [x] **Phase 2**: Deterministic Policy Engine (`lib/policy.ts`), named guardrail functions, strict integer paise arithmetic, Policy Decision Matrix unit test suite (15/15 passed).
