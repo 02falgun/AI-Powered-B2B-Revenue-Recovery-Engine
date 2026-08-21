@@ -1,3 +1,4 @@
+import { GoogleGenAI, Type } from '@google/genai';
 import OpenAI from 'openai';
 import { zodResponseFormat } from 'openai/helpers/zod';
 import { SYSTEM_PROMPT } from './ai-prompt';
@@ -29,7 +30,7 @@ function loadEnvLocalIfMissing(): void {
             const [key, ...valParts] = trimmed.split('=');
             const k = key.trim();
             const v = valParts.join('=').trim();
-            if (k && v && (!process.env[k] || process.env[k]?.includes('sk-mock-key'))) {
+            if (k && v && (!process.env[k] || process.env[k]?.includes('mock'))) {
               process.env[k] = v;
             }
           }
@@ -42,40 +43,82 @@ function loadEnvLocalIfMissing(): void {
 }
 
 /**
- * Encapsulated OpenAI client factory.
- * Fails closed if OPENAI_API_KEY environment variable is missing.
+ * Executes structured intent extraction via Google Gemini API (@google/genai SDK).
  */
-function getOpenAIClient(): Result<OpenAI, AppError> {
-  loadEnvLocalIfMissing();
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey || apiKey.trim() === '' || apiKey.includes('sk-mock-key')) {
-    return {
-      ok: false,
-      error: {
-        code: 'ai_error',
-        message: 'OpenAI API key missing or set to mock value in environment.',
-      },
-    };
-  }
+async function extractWithGemini(
+  geminiKey: string,
+  userPrompt: string,
+  params: ExtractIntentParams,
+  timeoutMs: number,
+): Promise<Result<ExtractedIntent, AppError>> {
+  const ai = new GoogleGenAI({ apiKey: geminiKey });
 
   try {
-    const openai = new OpenAI({ apiKey });
-    return { ok: true, data: openai };
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: `${SYSTEM_PROMPT}\n\n${userPrompt}`,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            intent: {
+              type: Type.STRING,
+              enum: ['full_payment', 'partial_payment', 'dispute', 'extension', 'unknown'],
+            },
+            promised_amount_inr: { type: Type.NUMBER },
+            promised_date: { type: Type.STRING },
+            dispute_present: { type: Type.BOOLEAN },
+            confidence: { type: Type.NUMBER },
+            rationale: { type: Type.STRING },
+            evidence: { type: Type.STRING },
+          },
+          required: ['intent', 'dispute_present', 'confidence', 'rationale', 'evidence'],
+        },
+        temperature: 0.1,
+      },
+    });
+
+    const responseText = response.text;
+    if (!responseText || responseText.trim() === '') {
+      return {
+        ok: false,
+        error: {
+          code: 'ai_error',
+          message: 'Gemini returned an empty structured response.',
+        },
+      };
+    }
+
+    const parsedJson = JSON.parse(responseText);
+    return validateAndSanitizeExtraction(parsedJson, params.outstandingAmountPaise);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to instantiate OpenAI client';
+    const isAbort =
+      (err instanceof Error && err.name === 'AbortError') ||
+      String(err).toLowerCase().includes('aborted') ||
+      String(err).toLowerCase().includes('timeout');
+
+    const errorMessage = isAbort
+      ? `Gemini extraction timed out after ${timeoutMs}ms.`
+      : err instanceof Error
+        ? err.message
+        : 'Unknown Gemini extraction error';
+
+    console.error(`[AI Error Phase 4 Guardrail] ${errorMessage}`);
+
     return {
       ok: false,
       error: {
         code: 'ai_error',
-        message: `OpenAI client initialization error: ${message}`,
+        message: `Gemini API extraction error: ${errorMessage}`,
+        details: { isTimeout: isAbort },
       },
     };
   }
 }
 
 /**
- * Extracts payment intent from buyer email text using OpenAI gpt-4o-mini Structured Outputs.
+ * Extracts payment intent from buyer email text using Gemini API (or OpenAI fallback).
  * Hardened in Phase 4 with strict timeout, AbortSignal, and fail-closed error handling.
  */
 export async function extractPaymentIntent(
@@ -102,12 +145,11 @@ export async function extractPaymentIntent(
     };
   }
 
-  const clientResult = getOpenAIClient();
-  if (!clientResult.ok) {
-    return clientResult;
-  }
+  loadEnvLocalIfMissing();
 
-  const openai = clientResult.data;
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const openAIKey = process.env.OPENAI_API_KEY;
+
   const outstandingAmountInr = (params.outstandingAmountPaise / 100).toFixed(2);
   const timeoutMs = params.timeoutMs ?? DEFAULT_AI_TIMEOUT_MS;
 
@@ -124,73 +166,90 @@ ${params.emailBody}
 """
 `.trim();
 
-  // Phase 4 Strict Timeout Handling
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  // 1. Prefer Gemini API if GEMINI_API_KEY is configured
+  if (geminiKey && geminiKey.trim() !== '' && !geminiKey.includes('mock')) {
+    return extractWithGemini(geminiKey, userPrompt, params, timeoutMs);
+  }
 
-  try {
-    const completionPromise = openai.chat.completions.parse(
-      {
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-        response_format: zodResponseFormat(ExtractionSchema, 'intent_extraction'),
-        temperature: 0.1,
-      },
-      { signal: controller.signal },
-    );
+  // 2. OpenAI API Fallback if OPENAI_API_KEY is configured
+  if (openAIKey && openAIKey.trim() !== '' && !openAIKey.includes('sk-mock-key')) {
+    const openai = new OpenAI({ apiKey: openAIKey });
 
-    const completion = await completionPromise;
-    clearTimeout(timeoutId);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const message = completion.choices[0]?.message;
+    try {
+      const completionPromise = openai.chat.completions.parse(
+        {
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt },
+          ],
+          response_format: zodResponseFormat(ExtractionSchema, 'intent_extraction'),
+          temperature: 0.1,
+        },
+        { signal: controller.signal },
+      );
 
-    if (!message || !message.parsed) {
-      if (message?.refusal) {
+      const completion = await completionPromise;
+      clearTimeout(timeoutId);
+
+      const message = completion.choices[0]?.message;
+
+      if (!message || !message.parsed) {
+        if (message?.refusal) {
+          return {
+            ok: false,
+            error: {
+              code: 'ai_error',
+              message: `OpenAI model refused request: ${message.refusal}`,
+            },
+          };
+        }
+
         return {
           ok: false,
           error: {
             code: 'ai_error',
-            message: `OpenAI model refused request: ${message.refusal}`,
+            message: 'OpenAI returned an empty or unparseable structured response.',
           },
         };
       }
+
+      return validateAndSanitizeExtraction(message.parsed, params.outstandingAmountPaise);
+    } catch (err: unknown) {
+      clearTimeout(timeoutId);
+      const isAbort =
+        (err instanceof Error && err.name === 'AbortError') ||
+        String(err).toLowerCase().includes('aborted') ||
+        String(err).toLowerCase().includes('timeout');
+
+      const errorMessage = isAbort
+        ? `OpenAI extraction timed out after ${timeoutMs}ms.`
+        : err instanceof Error
+          ? err.message
+          : 'Unknown OpenAI extraction error';
+
+      console.error(`[AI Error Phase 4 Guardrail] ${errorMessage}`);
 
       return {
         ok: false,
         error: {
           code: 'ai_error',
-          message: 'OpenAI returned an empty or unparseable structured response.',
+          message: errorMessage,
+          details: { isTimeout: isAbort },
         },
       };
     }
-
-    // Re-validate and sanitize LLM output server-side
-    return validateAndSanitizeExtraction(message.parsed, params.outstandingAmountPaise);
-  } catch (err: unknown) {
-    clearTimeout(timeoutId);
-    const isAbort =
-      (err instanceof Error && err.name === 'AbortError') ||
-      String(err).toLowerCase().includes('aborted') ||
-      String(err).toLowerCase().includes('timeout');
-
-    const errorMessage = isAbort
-      ? `OpenAI extraction timed out after ${timeoutMs}ms.`
-      : err instanceof Error
-        ? err.message
-        : 'Unknown OpenAI extraction error';
-
-    console.error(`[AI Error Phase 4 Guardrail] ${errorMessage}`);
-
-    return {
-      ok: false,
-      error: {
-        code: 'ai_error',
-        message: errorMessage,
-        details: { isTimeout: isAbort },
-      },
-    };
   }
+
+  // 3. Fail closed if neither API key is configured
+  return {
+    ok: false,
+    error: {
+      code: 'ai_error',
+      message: 'Gemini or OpenAI API key missing or set to mock value in environment.',
+    },
+  };
 }
