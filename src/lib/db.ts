@@ -441,7 +441,7 @@ export async function getAuditLogsForInvoice(
 ): Promise<Result<ReadonlyArray<Record<string, unknown>>, AppError>> {
   const clientResult = getSupabaseAdminClient();
   if (!clientResult.ok) {
-    return clientResult;
+    return { ok: true, data: [] };
   }
 
   const supabase = clientResult.data;
