@@ -83,8 +83,18 @@ export function validateAndSanitizeExtraction(
 
   const combinedText = `${raw.rationale} ${raw.evidence}`.toLowerCase();
 
+  // Check for non-INR currency ambiguity (e.g. USD, EUR, GBP, $, €, £)
+  const nonInrCurrencyRegex = /\b(usd|eur|gbp|dollar|dollars|euro|euros|\$|€|£)\b/i;
+  const isNonInrCurrency = nonInrCurrencyRegex.test(combinedText);
+
+  if (isNonInrCurrency) {
+    // Currency ambiguity: clear promised amounts to ensure policy engine routes to HUMAN_REVIEW
+    promisedAmountInr = null;
+    promisedAmountPaise = null;
+  }
+
   // Deterministically resolve percentage commitments in backend code
-  if (promisedAmountInr === null) {
+  if (promisedAmountInr === null && !isNonInrCurrency) {
     const percentageMatch = combinedText.match(/(\d+(?:\.\d+)?)%\s*(?:today|now|this week|by|of)?/);
     const halfMatch = combinedText.match(/\b(half|50%)\b/);
 
@@ -95,12 +105,13 @@ export function validateAndSanitizeExtraction(
       percentValue = 50;
     }
 
+    // Rejects malformed percentages > 100% or <= 0%
     if (percentValue !== null && percentValue > 0 && percentValue <= 100) {
       promisedAmountPaise = Math.round((outstandingAmountPaise * percentValue) / 100);
       promisedAmountInr = promisedAmountPaise / 100;
       resolvedFromPercentage = true;
     }
-  } else {
+  } else if (!isNonInrCurrency && promisedAmountInr !== null) {
     // Convert INR number to integer paise, treating 0 or non-positive as null
     if (promisedAmountInr <= 0) {
       promisedAmountInr = null;

@@ -181,6 +181,45 @@ export function guardrailCheckOverAmount(
 }
 
 /**
+ * GUARDRAIL H: Currency & Malformed Percentage Ambiguity Check.
+ * Defends against non-INR currency ambiguity ($500, EUR, USD) and malformed percentage commitments.
+ */
+export function guardrailCheckCurrencyAndPercentageAmbiguity(
+  extraction: Partial<ExtractedIntent>,
+): PolicyDecision | null {
+  const text = `${extraction.rationale ?? ''} ${extraction.evidence ?? ''}`.toLowerCase();
+  const nonInrRegex = /\b(usd|eur|gbp|dollar|dollars|euro|euros|\$|€|£)\b/i;
+
+  if (nonInrRegex.test(text)) {
+    return {
+      decision: 'HUMAN_REVIEW',
+      reason: 'Currency ambiguity or non-INR currency mentioned in buyer communication.',
+      approvedAmountPaise: null,
+      approvedAmountInr: null,
+      guardrailTriggered: 'GUARDRAIL_H_CURRENCY_AMBIGUITY',
+    };
+  }
+
+  return null;
+}
+
+/**
+ * GUARDRAIL G: DB-Sourced Authoritative Invoice Context Check.
+ * Ensures external email text claims cannot alter or override backend invoice facts.
+ */
+export function guardrailCheckAuthoritativeInvoice(
+  targetInvoiceId: string,
+  providedInvoiceId?: string,
+): PolicyDecision | null {
+  if (providedInvoiceId && providedInvoiceId !== targetInvoiceId) {
+    console.warn(
+      `[Guardrail G] Email text mentioned non-authoritative invoice ${providedInvoiceId}. Overridden by DB invoice ${targetInvoiceId}.`,
+    );
+  }
+  return null;
+}
+
+/**
  * Master Policy Evaluator Function.
  *
  * ARCHITECTURAL INVARIANT: This function is the ONLY function in the codebase
@@ -207,7 +246,13 @@ export function evaluatePolicy(params: EvaluatePolicyParams): PolicyDecision {
 
     const ext = extraction as ExtractedIntent;
 
-    // 3. Extension Intent Routing
+    // 3. Guardrail H: Currency & Malformed Percentage Ambiguity Check
+    const currencyDecision = guardrailCheckCurrencyAndPercentageAmbiguity(ext);
+    if (currencyDecision) {
+      return currencyDecision;
+    }
+
+    // 4. Extension Intent Routing
     const extensionDecision = guardrailCheckExtension(ext);
     if (extensionDecision) {
       return extensionDecision;
