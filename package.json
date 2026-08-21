@@ -7,12 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx scripts/test-webhook.ts && tsx scripts/test-razorpay.ts && tsx scripts/test-extraction.ts && tsx scripts/test-policy.ts && tsx scripts/test-orchestration.ts",
+    "test": "tsx scripts/test-webhook.ts && tsx scripts/test-razorpay.ts && tsx scripts/test-extraction.ts && tsx scripts/test-policy.ts && tsx scripts/test-orchestration.ts && tsx scripts/test-razorpay-checkout.ts",
     "test:webhook": "tsx scripts/test-webhook.ts",
     "test:razorpay": "tsx scripts/test-razorpay.ts",
     "test:ai": "tsx scripts/test-extraction.ts",
     "test:policy": "tsx scripts/test-policy.ts",
-    "test:orchestration": "tsx scripts/test-orchestration.ts"
+    "test:orchestration": "tsx scripts/test-orchestration.ts",
+    "test:checkout": "tsx scripts/test-razorpay-checkout.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

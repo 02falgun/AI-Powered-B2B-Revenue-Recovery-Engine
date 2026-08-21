@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { RazorpayCheckoutButton } from '@/components/RazorpayCheckoutButton';
 
 interface InvoiceData {
   readonly id: string;
@@ -172,12 +173,25 @@ export default function ProcessInvoicePage({ params }: { params: Promise<{ id: s
                 {invoice.customerName} &bull; {invoice.customerEmail}
               </p>
             </div>
-            <div className="bg-slate-900 border border-slate-800 px-5 py-3 rounded-xl text-right">
-              <div className="text-xs text-slate-400 uppercase tracking-wider font-medium">
-                Authoritative Outstanding Debt
+            <div className="bg-slate-900 border border-slate-800 px-5 py-3 rounded-xl text-right space-y-2">
+              <div>
+                <div className="text-xs text-slate-400 uppercase tracking-wider font-medium">
+                  Authoritative Outstanding Debt
+                </div>
+                <div className="text-2xl font-bold font-mono text-emerald-400">
+                  ₹{outstandingInr}
+                </div>
+                <div className="text-xs text-slate-500 font-mono">Total: ₹{totalInr}</div>
               </div>
-              <div className="text-2xl font-bold font-mono text-emerald-400">₹{outstandingInr}</div>
-              <div className="text-xs text-slate-500 font-mono">Total: ₹{totalInr}</div>
+              <RazorpayCheckoutButton
+                amountPaise={invoice.outstandingAmountPaise}
+                invoiceId={invoice.id}
+                customerName={invoice.customerName}
+                customerEmail={invoice.customerEmail}
+                buttonText="Direct Standard Checkout"
+                className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold"
+                onPaymentSuccess={() => fetchInvoiceDetails()}
+              />
             </div>
           </div>
         </div>
