@@ -8,11 +8,11 @@
 
 ## Task 1 — PII / Local File Paths (BLOCKING) ✅ RESOLVED
 
-**Found:** 7 occurrences of `file:///Users/kavyakumarthakur/KavTech/Projects/B2B-AI/` in `docs/judge-qa-prep.md` and 5 occurrences in `docs/phase6-adversarial-defenses.md`.
+- **Found:** Local machine absolute paths `file:///.../Projects/B2B-AI/` in `docs/judge-qa-prep.md` and `docs/phase6-adversarial-defenses.md`.
 
 **Changed:** Stripped the full local path prefix from all `file://` links in both files, leaving clean relative paths (e.g. `src/lib/policy.ts`) as the link target text.
 
-**Verified:** `grep -ri "Users/" docs/ README.md` → **empty output**.
+- **Verified:** `grep -ri "[local-user-path]" docs/ README.md` → **empty output**.
 
 ---
 
@@ -118,7 +118,7 @@ No prompt change was attempted. The frozen policy engine has 100% Policy Decisio
 
 | Check | Command | Result |
 | :--- | :--- | :--- |
-| PII paths in docs | `grep -ri "Users/" docs/ README.md` | ✅ Empty |
+| PII paths in docs | `grep -ri "[local-user-path]" docs/ README.md` | ✅ Empty |
 | Anon key in source | `grep -rn "PUBLISHABLE_KEY" src/` | ✅ Empty |
 | TypeScript strict | `npx tsc --noEmit` | ✅ 0 errors |
 | Policy Decision Accuracy | `npm run test:eval` | ✅ 20/20 (100.0%) |

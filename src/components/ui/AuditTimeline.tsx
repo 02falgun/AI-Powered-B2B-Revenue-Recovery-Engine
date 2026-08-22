@@ -1,5 +1,7 @@
 'use client';
 
+import { motion } from 'framer-motion';
+
 export interface AuditLogEntry {
   readonly id: string;
   readonly invoice_id: string;
@@ -14,128 +16,257 @@ interface AuditTimelineProps {
   readonly className?: string;
 }
 
+type EventConfig = {
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  icon: React.ReactNode;
+};
+
+function getEventConfig(actionName: string): EventConfig {
+  if (actionName === 'EMAIL_PROCESSED') {
+    return {
+      color: '#3395FF',
+      bgColor: '#3395FF20',
+      borderColor: '#3395FF40',
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <rect x="1" y="3" width="12" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M1 5l6 3.5L13 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      ),
+    };
+  }
+  if (actionName === 'PAYMENT_RECEIVED' || actionName === 'PAYMENT_VERIFIED') {
+    return {
+      color: '#00C48C',
+      bgColor: '#00C48C20',
+      borderColor: '#00C48C40',
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <rect x="1" y="2.5" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+      ),
+    };
+  }
+  if (actionName === 'PAYMENT_LINK_FAILED' || actionName === 'EMAIL_PROCESSING_FAILED') {
+    return {
+      color: '#F04E37',
+      bgColor: '#F04E3720',
+      borderColor: '#F04E3740',
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M7 4.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          <circle cx="7" cy="9.5" r="0.75" fill="currentColor" />
+        </svg>
+      ),
+    };
+  }
+  return {
+    color: '#7EC8E3',
+    bgColor: '#7EC8E320',
+    borderColor: '#7EC8E340',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+        <circle cx="7" cy="7" r="1.5" fill="currentColor" />
+      </svg>
+    ),
+  };
+}
+
+import type { Variants } from 'framer-motion';
+
+const containerVariants: Variants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.07 } },
+};
+
+const cardVariants: Variants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.25, 0.1, 0.25, 1] } },
+};
+
+/**
+ * AuditTimeline — layered, elevated event cards with depth stagger.
+ * Each event is a distinct, elevated card — not a flat item in a list.
+ */
 export function AuditTimeline({ logs, className = '' }: AuditTimelineProps) {
   if (!logs || logs.length === 0) {
     return (
       <div
-        className={`p-8 text-center text-slate-500 text-xs bg-slate-950/40 border border-slate-800 rounded-xl ${className}`}
+        className={`p-12 text-center text-[#1A2F55] text-sm rounded-2xl border border-dashed border-[#1A2F55] bg-[#0C1A3530] ${className}`}
       >
-        No audit log history recorded yet for this invoice.
+        <div className="space-y-2">
+          <p className="text-[#7EC8E360] font-display font-semibold">No Audit History Yet</p>
+          <p className="text-xs text-[#1A2F55]">
+            Process an email to generate the first audit log entry for this invoice.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={`space-y-4 font-sans ${className}`}>
-      <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-        <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-          Complete Audit Trail & Timeline History ({logs.length})
+    <div className={`space-y-5 font-sans ${className}`}>
+      {/* Header */}
+      <div className="flex justify-between items-center pb-3 border-b border-[#1A2F55]">
+        <h3 className="text-sm font-bold text-white font-display tracking-tight">
+          Complete Audit Trail ({logs.length} events)
         </h3>
-        <span className="text-xs font-mono text-emerald-400">Immutable Audit Record</span>
+        <div className="flex items-center gap-1.5">
+          <span
+            className="h-1.5 w-1.5 rounded-full bg-[#00C48C]"
+            style={{ animation: 'pulse-ring 2s ease-in-out infinite' }}
+            aria-hidden="true"
+          />
+          <span className="text-xs font-mono text-[#00C48C]">Immutable Record</span>
+        </div>
       </div>
 
-      <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-800">
-        {logs.map((log) => {
-          const dateStr = new Date(log.created_at).toLocaleString();
-          const actionName = log.action;
-          const actor = log.actor;
+      {/* Timeline */}
+      <div className="relative">
+        {/* Connector line */}
+        <div
+          className="absolute left-[19px] top-4 bottom-4 w-px"
+          style={{
+            background:
+              'linear-gradient(to bottom, transparent 0%, #1A2F55 10%, #1A2F55 90%, transparent 100%)',
+          }}
+          aria-hidden="true"
+        />
 
-          let badgeColor = 'bg-slate-800 text-slate-300';
-          let icon = '📌';
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="space-y-4 pl-10"
+        >
+          {logs.map((log) => {
+            const config = getEventConfig(log.action);
+            const dateStr = new Date(log.created_at).toLocaleString('en-IN', {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            });
 
-          if (actionName === 'EMAIL_PROCESSED') {
-            badgeColor = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30';
-            icon = '📩';
-          } else if (actionName === 'PAYMENT_RECEIVED' || actionName === 'PAYMENT_VERIFIED') {
-            badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
-            icon = '💳';
-          } else if (
-            actionName === 'PAYMENT_LINK_FAILED' ||
-            actionName === 'EMAIL_PROCESSING_FAILED'
-          ) {
-            badgeColor = 'bg-red-500/20 text-red-300 border-red-500/30';
-            icon = '⚠️';
-          }
+            return (
+              <motion.div key={log.id} variants={cardVariants} className="relative">
+                {/* Node dot — positioned on the connector line */}
+                <div
+                  className="absolute -left-[29px] top-3.5 h-[9px] w-[9px] rounded-full border-2 border-[#060E1F] flex items-center justify-center"
+                  style={{
+                    backgroundColor: config.color,
+                    boxShadow: `0 0 6px ${config.color}60`,
+                  }}
+                  aria-hidden="true"
+                />
 
-          return (
-            <div key={log.id} className="relative space-y-1.5 group">
-              {/* Node Icon Circle */}
-              <div className="absolute -left-[31px] top-0.5 h-6 w-6 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center text-xs shadow-sm">
-                {icon}
-              </div>
-
-              {/* Event Header */}
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`px-2 py-0.5 rounded text-xs font-mono font-bold border ${badgeColor}`}
+                {/* Event card — elevated */}
+                <div
+                  className="rounded-xl border overflow-hidden shadow-surface hover:shadow-raised transition-shadow duration-300"
+                  style={{
+                    background: '#0C1A35',
+                    borderColor: config.borderColor,
+                  }}
+                >
+                  {/* Card header */}
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                    style={{ background: `${config.bgColor}` }}
                   >
-                    {actionName}
-                  </span>
-                  <span className="text-xs font-mono text-slate-400">Actor: {actor}</span>
+                    <div className="flex items-center gap-2.5">
+                      <span style={{ color: config.color }}>{config.icon}</span>
+                      <span
+                        className="text-xs font-bold font-mono"
+                        style={{ color: config.color }}
+                      >
+                        {log.action}
+                      </span>
+                      <span className="text-[10px] text-[#7EC8E360] font-mono">
+                        — {log.actor}
+                      </span>
+                    </div>
+                    <time
+                      dateTime={log.created_at}
+                      className="text-[10px] font-mono text-[#1A2F55] flex-shrink-0"
+                    >
+                      {dateStr}
+                    </time>
+                  </div>
+
+                  {/* Metadata details */}
+                  <div className="px-4 py-3 space-y-2.5">
+                    {Boolean(log.metadata?.policy_decision) && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-[#7EC8E360] font-mono">
+                          Policy Decision
+                        </span>
+                        <span
+                          className={`font-mono font-bold text-xs px-2.5 py-0.5 rounded-full ${
+                            log.metadata.policy_decision === 'AUTO_RECOVER'
+                              ? 'bg-[#00C48C20] text-[#00C48C] border border-[#00C48C40]'
+                              : 'bg-[#F5A62320] text-[#F5A623] border border-[#F5A62340]'
+                          }`}
+                        >
+                          {String(log.metadata.policy_decision)}
+                        </span>
+                      </div>
+                    )}
+
+                    {Boolean(log.metadata?.policy_reason) && (
+                      <div>
+                        <span className="text-[10px] text-[#7EC8E360] font-mono block mb-1">
+                          Policy Reason
+                        </span>
+                        <p className="text-[11px] text-[#C4D4EC] leading-relaxed">
+                          {String(log.metadata.policy_reason)}
+                        </p>
+                      </div>
+                    )}
+
+                    {Boolean(log.metadata?.original_email) && (
+                      <div>
+                        <span className="text-[10px] text-[#7EC8E360] font-mono block mb-1">
+                          Email Input
+                        </span>
+                        <blockquote className="text-[11px] text-[#7EC8E380] font-mono italic bg-[#060E1F60] px-3 py-2 rounded-lg border border-[#1A2F5560] line-clamp-2">
+                          &ldquo;{String(log.metadata.original_email)}&rdquo;
+                        </blockquote>
+                      </div>
+                    )}
+
+                    {Boolean(log.metadata?.short_url) && (
+                      <div className="flex items-center justify-between pt-2 border-t border-[#1A2F5550]">
+                        <span className="text-[10px] text-[#7EC8E360] font-mono">Payment Link</span>
+                        <a
+                          href={String(log.metadata.short_url)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-[#00C48C] hover:text-[#00C48Ccc] font-mono underline underline-offset-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3395FF] rounded"
+                        >
+                          {String(log.metadata.short_url)}
+                        </a>
+                      </div>
+                    )}
+
+                    {Boolean(log.metadata?.amount_paid_paise) && (
+                      <div className="flex items-center justify-between pt-2 border-t border-[#1A2F5550]">
+                        <span className="text-[10px] text-[#7EC8E360] font-mono">
+                          Amount Recovered
+                        </span>
+                        <span className="text-sm font-bold font-mono text-[#00C48C]">
+                          ₹{(Number(log.metadata.amount_paid_paise) / 100).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <span className="text-[11px] font-mono text-slate-500">{dateStr}</span>
-              </div>
-
-              {/* Metadata Details Card */}
-              <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-lg text-xs space-y-2">
-                {Boolean(log.metadata?.policy_decision) && (
-                  <div className="flex items-center justify-between text-slate-300">
-                    <span className="text-slate-500 font-medium">Policy Decision:</span>
-                    <span
-                      className={`font-mono font-bold px-2 py-0.5 rounded text-[11px] ${
-                        log.metadata.policy_decision === 'AUTO_RECOVER'
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'bg-amber-500/20 text-amber-400'
-                      }`}
-                    >
-                      {String(log.metadata.policy_decision)}
-                    </span>
-                  </div>
-                )}
-
-                {Boolean(log.metadata?.policy_reason) && (
-                  <div>
-                    <span className="text-slate-500 font-medium block">Policy Reason:</span>
-                    <p className="text-slate-300 font-sans text-[11px] mt-0.5">
-                      {String(log.metadata.policy_reason)}
-                    </p>
-                  </div>
-                )}
-
-                {Boolean(log.metadata?.original_email) && (
-                  <div>
-                    <span className="text-slate-500 font-medium block">Raw Email Text Input:</span>
-                    <p className="text-slate-400 font-mono text-[11px] italic bg-slate-900/60 p-2 rounded border border-slate-800 mt-1 line-clamp-3">
-                      "{String(log.metadata.original_email)}"
-                    </p>
-                  </div>
-                )}
-
-                {Boolean(log.metadata?.short_url) && (
-                  <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-800/60">
-                    <span className="text-slate-500">Razorpay Payment Link:</span>
-                    <a
-                      href={String(log.metadata.short_url)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-emerald-400 hover:underline font-mono"
-                    >
-                      {String(log.metadata.short_url)}
-                    </a>
-                  </div>
-                )}
-
-                {Boolean(log.metadata?.amount_paid_paise) && (
-                  <div className="flex justify-between items-center text-xs text-emerald-400 font-mono">
-                    <span>Payment Received:</span>
-                    <span>₹{(Number(log.metadata.amount_paid_paise) / 100).toFixed(2)}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+              </motion.div>
+            );
+          })}
+        </motion.div>
       </div>
     </div>
   );

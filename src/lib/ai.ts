@@ -54,30 +54,41 @@ async function extractWithGemini(
   const ai = new GoogleGenAI({ apiKey: geminiKey });
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: `${SYSTEM_PROMPT}\n\n${userPrompt}`,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            intent: {
-              type: Type.STRING,
-              enum: ['full_payment', 'partial_payment', 'dispute', 'extension', 'unknown'],
-            },
-            promised_amount_inr: { type: Type.NUMBER },
-            promised_date: { type: Type.STRING },
-            dispute_present: { type: Type.BOOLEAN },
-            confidence: { type: Type.NUMBER },
-            rationale: { type: Type.STRING },
-            evidence: { type: Type.STRING },
-          },
-          required: ['intent', 'dispute_present', 'confidence', 'rationale', 'evidence'],
-        },
-        temperature: 0.1,
-      },
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        const timeoutErr = new Error(`Gemini extraction timed out after ${timeoutMs}ms.`);
+        timeoutErr.name = 'AbortError';
+        reject(timeoutErr);
+      }, timeoutMs);
     });
+
+    const response = await Promise.race([
+      ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: `${SYSTEM_PROMPT}\n\n${userPrompt}`,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              intent: {
+                type: Type.STRING,
+                enum: ['full_payment', 'partial_payment', 'dispute', 'extension', 'unknown'],
+              },
+              promised_amount_inr: { type: Type.NUMBER },
+              promised_date: { type: Type.STRING },
+              dispute_present: { type: Type.BOOLEAN },
+              confidence: { type: Type.NUMBER },
+              rationale: { type: Type.STRING },
+              evidence: { type: Type.STRING },
+            },
+            required: ['intent', 'dispute_present', 'confidence', 'rationale', 'evidence'],
+          },
+          temperature: 0.1,
+        },
+      }),
+      timeoutPromise,
+    ]);
 
     const responseText = response.text;
     if (!responseText || responseText.trim() === '') {

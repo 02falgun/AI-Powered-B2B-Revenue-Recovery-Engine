@@ -104,7 +104,7 @@ export async function createTestPaymentLink(
       customer: {
         name: params.customerName,
         email: params.customerEmail,
-        contact: params.customerPhone ?? '+919999999999',
+        ...(params.customerPhone ? { contact: params.customerPhone } : { contact: '+919876543210' }),
       },
       notify: {
         sms: false,
@@ -142,7 +142,10 @@ export async function createTestPaymentLink(
       },
     };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown Razorpay payment link error';
+    const errorObj = err as { error?: { description?: string; code?: string }; message?: string };
+    const message =
+      errorObj?.error?.description ??
+      (err instanceof Error ? err.message : 'Unknown Razorpay payment link error');
     return {
       ok: false,
       error: {

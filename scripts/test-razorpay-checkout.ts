@@ -1,11 +1,35 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import Razorpay from 'razorpay';
+
+function loadEnv(): void {
+  try {
+    const envPath = path.resolve(process.cwd(), '.env.local');
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, 'utf8');
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+          const [key, ...rest] = trimmed.split('=');
+          const k = key.trim();
+          const v = rest.join('=').trim();
+          if (k && v && !process.env[k]) {
+            process.env[k] = v;
+          }
+        }
+      }
+    }
+  } catch {}
+}
+
+loadEnv();
 
 async function runCheckoutVerificationTest(): Promise<void> {
   console.log('=== RecoverAI: Razorpay Standard Checkout Integration Verification ===\n');
 
-  const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_TSOJfqI5DSz59Z';
-  const keySecret = process.env.RAZORPAY_KEY_SECRET || 'C1U75rq7SWn7rjE4xXDW3Fjn';
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
   console.log('1. Verifying credentials format:');
   console.log('   RAZORPAY_KEY_ID    :', keyId);
@@ -58,7 +82,7 @@ async function runCheckoutVerificationTest(): Promise<void> {
 
     // Calculate valid signature using KEY_SECRET
     const validSignature = crypto
-      .createHmac('sha256', keySecret)
+      .createHmac('sha256', keySecret ?? 'mock_secret_fallback')
       .update(`${testOrderId}|${testPaymentId}`)
       .digest('hex');
 

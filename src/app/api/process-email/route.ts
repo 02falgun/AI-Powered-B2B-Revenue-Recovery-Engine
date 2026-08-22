@@ -3,6 +3,8 @@ import { getInvoiceById, insertAuditLog } from '@/lib/db';
 import { extractPaymentIntent } from '@/lib/ai';
 import { evaluatePolicy } from '@/lib/policy';
 import { createTestPaymentLink } from '@/lib/razorpay';
+import { getCurrentUser } from '@/lib/auth';
+import { checkProcessEmailRateLimit } from '@/lib/ratelimit';
 import type { ExtractedIntent } from '@/lib/ai-schema';
 
 export interface ProcessEmailRequestBody {
@@ -11,17 +13,18 @@ export interface ProcessEmailRequestBody {
 }
 
 /**
- * Core Orchestration API Route — Hardened in Phase 4.
+ * Core Orchestration API Route — Hardened in Phase 2 & 4.
  *
  * Sequence & Reliability Invariants:
- * 1. Input validation.
- * 2. Supabase DB invoice lookup for authoritative outstanding balance.
- * 3. AI intent extraction (lib/ai.ts) with 10s timeout & fail-closed error handling.
- * 4. Deterministic policy evaluation (lib/policy.ts).
- * 5. If AUTO_RECOVER: Razorpay Test Payment Link creation (lib/razorpay.ts).
- *    - On Razorpay failure: Overrides decision to HUMAN_REVIEW, logs PAYMENT_LINK_FAILED, returns failure.
- * 6. Mandatory audit logging (audit_logs table).
- * 7. Typed JSON response with explicit failure modes (validation_error, ai_error, policy_rejected, payment_error).
+ * 1. Input validation & maximum payload size boundary check (<= 10,000 chars).
+ * 2. Rate limiting check (per-user sliding window + global backstop) via Upstash Redis.
+ *    - On rate-limit: Writes audit log, returns HTTP 429 with plain operator message & Retry-After.
+ * 3. Supabase DB invoice lookup for authoritative outstanding balance.
+ * 4. AI intent extraction (lib/ai.ts) with 10s timeout & fail-closed error handling.
+ * 5. Deterministic policy evaluation (lib/policy.ts).
+ * 6. If AUTO_RECOVER: Razorpay Test Payment Link creation (lib/razorpay.ts).
+ * 7. Mandatory audit logging (audit_logs table).
+ * 8. Typed JSON response with explicit failure modes.
  */
 export async function POST(request: Request): Promise<NextResponse> {
   let body: ProcessEmailRequestBody;
@@ -53,6 +56,79 @@ export async function POST(request: Request): Promise<NextResponse> {
         },
       },
       { status: 400 },
+    );
+  }
+
+  // 1. Payload Size Boundary Check (Reject oversized emails before AI invocation)
+  const MAX_EMAIL_BODY_CHARS = parseInt(process.env.MAX_EMAIL_BODY_CHARS || '10000', 10);
+  if (emailText.length > MAX_EMAIL_BODY_CHARS) {
+    return NextResponse.json(
+      {
+        success: false,
+        failureCode: 'validation_error',
+        error: {
+          code: 'validation_error',
+          message: `Submitted email text exceeds maximum allowed size limit of ${MAX_EMAIL_BODY_CHARS} characters (received ${emailText.length} characters).`,
+        },
+      },
+      { status: 400 },
+    );
+  }
+
+  // 2. Sliding-Window & Global Backstop Rate Limiting Check (Phase P2)
+  const userResult = await getCurrentUser();
+  const userId = userResult.ok ? userResult.data.id : 'anonymous_operator';
+  const userActor = userResult.ok ? userResult.data.email : 'anonymous_operator';
+
+  const rateLimitResult = await checkProcessEmailRateLimit(userId);
+  if (!rateLimitResult.success) {
+    console.warn(
+      `[RateLimit Exceeded] User ${userId} (${userActor}) hit ${rateLimitResult.scope} rate limit on /api/process-email. Retry after ${rateLimitResult.retryAfterSeconds}s`,
+    );
+
+    // Mandatory Audit Logging for Rate-Limit Rejections
+    await insertAuditLog({
+      invoiceId,
+      action: 'RATE_LIMIT_EXCEEDED',
+      actor: userActor,
+      metadata: {
+        user_id: userId,
+        scope: rateLimitResult.scope,
+        limit: rateLimitResult.limit,
+        remaining: rateLimitResult.remaining,
+        retry_after_seconds: rateLimitResult.retryAfterSeconds,
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    const rateLimitMessage =
+      rateLimitResult.scope === 'global'
+        ? 'System processing capacity limit reached across all accounts. Please wait a moment and try again.'
+        : "You've hit the processing limit for this hour — please try again shortly.";
+
+    return NextResponse.json(
+      {
+        success: false,
+        failureCode: 'rate_limited',
+        error: {
+          code: 'rate_limited',
+          message: rateLimitMessage,
+          details: {
+            scope: rateLimitResult.scope,
+            retryAfterSeconds: rateLimitResult.retryAfterSeconds,
+          },
+        },
+        retryAfterSeconds: rateLimitResult.retryAfterSeconds,
+      },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(rateLimitResult.retryAfterSeconds),
+          'X-RateLimit-Limit': String(rateLimitResult.limit),
+          'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+          'X-RateLimit-Reset': String(rateLimitResult.reset),
+        },
+      },
     );
   }
 

@@ -9,7 +9,8 @@ export type FailureCode =
   | 'policy_rejected'
   | 'payment_error'
   | 'db_error'
-  | 'unauthorized_error';
+  | 'unauthorized_error'
+  | 'rate_limited';
 
 export interface AppError {
   readonly code: FailureCode;
@@ -43,4 +44,19 @@ export interface AuditLog {
   readonly actor: string;
   readonly metadata: Readonly<Record<string, unknown>>;
   readonly createdAt: string;
+}
+
+export type UserRole = 'admin' | 'operator';
+
+export interface UserProfile {
+  readonly id: string;
+  readonly role: UserRole;
+  readonly email?: string;
+  readonly createdAt: string;
+}
+
+export interface AuthenticatedUser {
+  readonly id: string;
+  readonly email: string;
+  readonly role: UserRole;
 }

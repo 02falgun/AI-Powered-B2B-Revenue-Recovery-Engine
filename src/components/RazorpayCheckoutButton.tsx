@@ -49,7 +49,7 @@ export function RazorpayCheckoutButton({
   invoiceId,
   customerName,
   customerEmail,
-  customerPhone = '+919999999999',
+  customerPhone = '+919876543210',
   buttonText = 'Pay Now with Razorpay Checkout',
   className = '',
   onPaymentSuccess,

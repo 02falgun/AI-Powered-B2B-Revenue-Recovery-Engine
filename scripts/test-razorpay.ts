@@ -1,4 +1,28 @@
+import fs from 'fs';
+import path from 'path';
 import { createTestPaymentLink } from '../src/lib/razorpay';
+
+function loadEnv(): void {
+  try {
+    const envPath = path.resolve(process.cwd(), '.env.local');
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, 'utf8');
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+          const [key, ...rest] = trimmed.split('=');
+          const k = key.trim();
+          const v = rest.join('=').trim();
+          if (k && v && !process.env[k]) {
+            process.env[k] = v;
+          }
+        }
+      }
+    }
+  } catch {}
+}
+
+loadEnv();
 
 async function runDevTest(): Promise<void> {
   console.log('=== RecoverAI: Razorpay Test Payment Link Verification ===');
