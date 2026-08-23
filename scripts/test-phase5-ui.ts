@@ -103,6 +103,34 @@ async function runPhase5UITests(): Promise<void> {
     'Guardrail A flagged in output',
     String(shortcut3Policy.guardrailTriggered).startsWith('GUARDRAIL_A'),
   );
+  assert(
+    'shortcut3Policy includes exactly 8 guardrailResults',
+    Array.isArray(shortcut3Policy.guardrailResults) && shortcut3Policy.guardrailResults.length === 8,
+  );
+
+  const guardrailA = shortcut3Policy.guardrailResults?.find((g) => g.id === 'A');
+  assert(
+    'Overpayment case explicitly marks Guardrail A (Outstanding Cap) as failed (passed=false, evaluated=true)',
+    guardrailA !== undefined && guardrailA.passed === false && guardrailA.evaluated === true,
+  );
+
+  const guardrailC = shortcut2Policy.guardrailResults?.find((g) => g.id === 'C');
+  assert(
+    'Dispute case explicitly marks Guardrail C (Dispute Filter) as failed (passed=false, evaluated=true)',
+    guardrailC !== undefined && guardrailC.passed === false && guardrailC.evaluated === true,
+  );
+
+  const guardrailF_in_dispute = shortcut2Policy.guardrailResults?.find((g) => g.id === 'F');
+  assert(
+    'Subsequent guardrails in short-circuit failure mark evaluated=false (Not Evaluated/Idle)',
+    guardrailF_in_dispute !== undefined && guardrailF_in_dispute.evaluated === false,
+  );
+
+  const allPassed = shortcut1Policy.guardrailResults?.every((g) => g.passed && g.evaluated);
+  assert(
+    'AUTO_RECOVER case marks all 8 guardrails as passed=true and evaluated=true',
+    allPassed === true,
+  );
 
   console.log(`\n================================================================================`);
   console.log(`PHASE 5 VERIFICATION RESULTS: ${passed} passed, ${failed} failed.`);

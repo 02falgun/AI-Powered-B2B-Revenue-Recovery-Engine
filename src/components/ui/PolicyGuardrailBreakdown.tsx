@@ -2,140 +2,195 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-
-interface GuardrailSwitch {
-  readonly letter: string;
-  readonly code: string;
-  readonly label: string;
-  readonly description: string;
-  readonly isPassed: boolean;
-  readonly details: string;
-}
+import type { GuardrailResult } from '@/lib/policy';
 
 interface PolicyGuardrailBreakdownProps {
   readonly decision: 'AUTO_RECOVER' | 'HUMAN_REVIEW' | string;
   readonly reason: string;
   readonly guardrailTriggered?: string | null;
+  readonly guardrailResults?: readonly GuardrailResult[] | null;
   readonly confidence?: number;
   readonly approvedAmountPaise?: number | null;
   readonly outstandingAmountPaise?: number;
   readonly disputePresent?: boolean;
 }
 
+const DEFAULT_GUARDRAILS: readonly GuardrailResult[] = [
+  {
+    id: 'A',
+    code: 'GUARDRAIL_A',
+    label: 'OUTSTANDING CAP',
+    description: 'Promised sum capped at authoritative DB balance',
+    passed: true,
+    evaluated: true,
+    reason: 'Validated against ledger balance',
+  },
+  {
+    id: 'B',
+    code: 'GUARDRAIL_B',
+    label: 'POSITIVE AMOUNT',
+    description: 'Promised sum must be a positive integer in paise',
+    passed: true,
+    evaluated: true,
+    reason: 'Positive monetary integer validated',
+  },
+  {
+    id: 'C',
+    code: 'GUARDRAIL_C',
+    label: 'DISPUTE FILTER',
+    description: 'Zero active dispute, price conflict, or counterclaim',
+    passed: true,
+    evaluated: true,
+    reason: 'Clean settlement intent without dispute',
+  },
+  {
+    id: 'D',
+    code: 'GUARDRAIL_D',
+    label: 'AI CONFIDENCE (>=0.7)',
+    description: 'Extraction confidence score meets reliability floor',
+    passed: true,
+    evaluated: true,
+    reason: 'Confidence score meets 0.70 threshold',
+  },
+  {
+    id: 'E',
+    code: 'GUARDRAIL_E',
+    label: 'INPUT SANITY',
+    description: 'Complete, well-formed input and positive integer balance',
+    passed: true,
+    evaluated: true,
+    reason: 'Well-formed input payload structure',
+  },
+  {
+    id: 'F',
+    code: 'GUARDRAIL_F',
+    label: 'SOLE AUTHORITY',
+    description: 'Pure deterministic evaluator is sole recovery authority',
+    passed: true,
+    evaluated: true,
+    reason: 'Sole authority invariant satisfied',
+  },
+  {
+    id: 'G',
+    code: 'GUARDRAIL_G',
+    label: 'DB TRUTH LOCK',
+    description: 'DB invoice facts source of truth over email claims',
+    passed: true,
+    evaluated: true,
+    reason: 'Authoritative DB invoice context locked',
+  },
+  {
+    id: 'H',
+    code: 'GUARDRAIL_H',
+    label: 'CURRENCY LOCK',
+    description: 'Strict INR currency and valid percentage sanity',
+    passed: true,
+    evaluated: true,
+    reason: 'Strict INR currency validated',
+  },
+];
+
+/**
+ * Fallback synthesizer for guardrail results if backend did not include guardrailResults.
+ */
+function deriveGuardrailsFromInputs(props: PolicyGuardrailBreakdownProps): readonly GuardrailResult[] {
+  const isAutoRecover = props.decision === 'AUTO_RECOVER';
+  if (isAutoRecover) {
+    return DEFAULT_GUARDRAILS.map((g) => ({ ...g, passed: true, evaluated: true }));
+  }
+
+  const triggered = (props.guardrailTriggered || '').toUpperCase();
+  const reason = props.reason || '';
+
+  let failedId: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' = 'D';
+
+  if (triggered.includes('GUARDRAIL_C') || props.disputePresent || reason.toLowerCase().includes('dispute')) {
+    failedId = 'C';
+  } else if (triggered.includes('GUARDRAIL_E') || reason.toLowerCase().includes('malformed') || reason.toLowerCase().includes('invalid')) {
+    failedId = 'E';
+  } else if (triggered.includes('GUARDRAIL_D') || (props.confidence !== undefined && props.confidence < 0.7) || reason.toLowerCase().includes('confidence')) {
+    failedId = 'D';
+  } else if (triggered.includes('GUARDRAIL_H') || reason.toLowerCase().includes('currency') || reason.toLowerCase().includes('usd')) {
+    failedId = 'H';
+  } else if (triggered.includes('GUARDRAIL_B') || reason.toLowerCase().includes('non-positive') || reason.toLowerCase().includes('zero')) {
+    failedId = 'B';
+  } else if (
+    triggered.includes('GUARDRAIL_A') ||
+    reason.toLowerCase().includes('exceeds') ||
+    (props.approvedAmountPaise && props.outstandingAmountPaise && props.approvedAmountPaise > props.outstandingAmountPaise)
+  ) {
+    failedId = 'A';
+  }
+
+  // Evaluation sequence order: C -> E -> D -> H -> G -> B -> A -> F
+  const evalOrder: Array<'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'> = ['C', 'E', 'D', 'H', 'G', 'B', 'A', 'F'];
+  const failedIndex = evalOrder.indexOf(failedId);
+
+  return DEFAULT_GUARDRAILS.map((g) => {
+    const itemIndex = evalOrder.indexOf(g.id);
+    if (g.id === failedId) {
+      return {
+        ...g,
+        passed: false,
+        evaluated: true,
+        reason: props.reason || 'Failed policy check criteria',
+      };
+    }
+    if (itemIndex < failedIndex) {
+      return {
+        ...g,
+        passed: true,
+        evaluated: true,
+      };
+    }
+    return {
+      ...g,
+      passed: false,
+      evaluated: false,
+      reason: 'Not evaluated (short-circuited by preceding guardrail failure)',
+    };
+  });
+}
+
 /**
  * PolicyGuardrailBreakdown — THE SIGNATURE ELEMENT (Physical Toggle-Switch Bank).
  *
- * Simulates an 8-switch breaker panel in an industrial instrument chassis.
- * Each switch (A–H) mechanically flips into position with a tactile click animation.
- * Grayscale only — state is distinguished via physical rocker position, embossed text, and iconography.
+ * Renders an 8-switch breaker annunciator rack in an industrial instrument chassis.
+ * Each switch displays one of 3 distinct real-world states:
+ * 1. PASSED: Checked and passed (clean illuminated plate).
+ * 2. FAILED: Checked and failed (high-contrast flagged breaker with failure reason).
+ * 3. NOT EVALUATED: Short-circuited / not reached (dimmed neutral idle state).
+ *
+ * Layout uses responsive flex layout with flex-shrink:0 on status badges to ensure
+ * multi-line wrapped titles NEVER overlap or clip badges.
  */
-export function PolicyGuardrailBreakdown({
-  decision,
-  reason,
-  guardrailTriggered,
-  confidence,
-  approvedAmountPaise,
-  outstandingAmountPaise,
-  disputePresent,
-}: PolicyGuardrailBreakdownProps) {
+export function PolicyGuardrailBreakdown(props: PolicyGuardrailBreakdownProps) {
+  const { decision, reason, guardrailResults } = props;
   const isAutoRecover = decision === 'AUTO_RECOVER';
   const [flippedCount, setFlippedCount] = useState<number>(0);
 
-  // Compute 8 guardrail switch states
-  const isDisputeTripped = Boolean(disputePresent || guardrailTriggered === 'GUARDRAIL_C');
-  const isConfidenceTripped = Boolean((confidence !== undefined && confidence < 0.7) || guardrailTriggered === 'GUARDRAIL_F');
-  const isThresholdTripped = Boolean(guardrailTriggered === 'GUARDRAIL_D');
-  const isCapTripped = Boolean(
-    (approvedAmountPaise && outstandingAmountPaise && approvedAmountPaise > outstandingAmountPaise) ||
-    guardrailTriggered === 'GUARDRAIL_E',
-  );
-  const isAmountTripped = Boolean(guardrailTriggered === 'GUARDRAIL_A');
-  const isDateTripped = Boolean(guardrailTriggered === 'GUARDRAIL_B');
-  const isAdversarialTripped = Boolean(guardrailTriggered === 'GUARDRAIL_G');
-  const isEntityTripped = Boolean(guardrailTriggered === 'GUARDRAIL_H');
+  const activeGuardrails: readonly GuardrailResult[] =
+    guardrailResults && guardrailResults.length === 8
+      ? guardrailResults
+      : deriveGuardrailsFromInputs(props);
 
-  const switches: ReadonlyArray<GuardrailSwitch> = [
-    {
-      letter: 'A',
-      code: 'GUARDRAIL_A',
-      label: 'EXPLICIT AMOUNT',
-      description: 'Definitive payable sum extracted from communication',
-      isPassed: !isAmountTripped,
-      details: !isAmountTripped ? 'Parsed monetary commitment' : 'Ambiguous or unstated payment sum',
-    },
-    {
-      letter: 'B',
-      code: 'GUARDRAIL_B',
-      label: 'DATE WINDOW (<=30D)',
-      description: 'Promised payment within 30 days of due date',
-      isPassed: !isDateTripped,
-      details: !isDateTripped ? 'Within allowed settlement horizon' : 'Promise date exceeds 30-day grace',
-    },
-    {
-      letter: 'C',
-      code: 'GUARDRAIL_C',
-      label: 'DISPUTE FILTER',
-      description: 'Zero active dispute, counterclaim, or conflict',
-      isPassed: !isDisputeTripped,
-      details: !isDisputeTripped ? 'Clean settlement intent' : 'Active billing dispute flagged',
-    },
-    {
-      letter: 'D',
-      code: 'GUARDRAIL_D',
-      label: 'MIN 50% THRESHOLD',
-      description: 'Promised recovery meets minimum 50% threshold',
-      isPassed: !isThresholdTripped,
-      details: !isThresholdTripped ? 'Threshold criteria satisfied' : 'Offer below 50% minimum',
-    },
-    {
-      letter: 'E',
-      code: 'GUARDRAIL_E',
-      label: 'OUTSTANDING CAP',
-      description: 'Approved amount capped at authoritative DB balance',
-      isPassed: !isCapTripped,
-      details: !isCapTripped ? 'Validated against ledger balance' : 'Exceeds ledger balance',
-    },
-    {
-      letter: 'F',
-      code: 'GUARDRAIL_F',
-      label: 'AI CONFIDENCE (>=0.7)',
-      description: 'Model extraction confidence meets reliability floor',
-      isPassed: !isConfidenceTripped,
-      details: !isConfidenceTripped ? `Confidence: ${Math.round((confidence || 0.95) * 100)}%` : 'Below 70% threshold',
-    },
-    {
-      letter: 'G',
-      code: 'GUARDRAIL_G',
-      label: 'ADVERSARIAL GUARD',
-      description: 'Immune to prompt injection and malicious override',
-      isPassed: !isAdversarialTripped,
-      details: !isAdversarialTripped ? 'Sanitized input stream' : 'Adversarial pattern blocked',
-    },
-    {
-      letter: 'H',
-      code: 'GUARDRAIL_H',
-      label: 'ENTITY MATCH',
-      description: 'Verified matching invoice and customer identifier',
-      isPassed: !isEntityTripped,
-      details: !isEntityTripped ? 'Authoritative entity lock' : 'Unmatched entity reference',
-    },
-  ];
+  const failedGuardrail = activeGuardrails.find((g) => g.evaluated && !g.passed);
 
   // Stagger switch flip animations
   useEffect(() => {
     setFlippedCount(0);
     const timers: NodeJS.Timeout[] = [];
-    switches.forEach((_, idx) => {
+    activeGuardrails.forEach((_, idx) => {
       const timer = setTimeout(() => {
         setFlippedCount((prev) => Math.max(prev, idx + 1));
-      }, (idx + 1) * 75);
+      }, (idx + 1) * 60);
       timers.push(timer);
     });
 
     return () => {
       timers.forEach(clearTimeout);
     };
-  }, [decision, guardrailTriggered]);
+  }, [decision, props.guardrailTriggered]);
 
   return (
     <div className="panel-raised p-6 rounded-xl space-y-6">
@@ -143,13 +198,13 @@ export function PolicyGuardrailBreakdown({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#26262B]">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs uppercase tracking-widest text-[#71717A] font-semibold">
+            <span className="text-xs uppercase tracking-widest text-[#71717A] font-bold font-mono">
               ANNUNCIATOR PANEL // RACK-08
             </span>
             <span className="w-1.5 h-1.5 rounded-full bg-[#FAFAFA]" />
           </div>
-          <h3 className="text-lg font-bold text-[#FAFAFA] mt-1 font-display">
-            Policy Engine Guardrail Interlocks
+          <h3 className="text-lg font-black text-[#FAFAFA] mt-1 font-display tracking-tight">
+            Policy Engine Guardrail Interlocks (A–H)
           </h3>
         </div>
 
@@ -161,84 +216,129 @@ export function PolicyGuardrailBreakdown({
               : 'bg-[#18181B] text-[#FAFAFA] border-2 border-[#71717A] shadow-[inset_0_2px_4px_rgba(0,0,0,0.8)] font-bold'
           }`}
         >
-          <span className="text-base leading-none" aria-hidden="true">
+          <span className="text-base leading-none font-black" aria-hidden="true">
             {isAutoRecover ? '✓' : '▲'}
           </span>
           <div className="flex flex-col text-left">
             <span className="text-[10px] tracking-widest uppercase opacity-75 font-mono leading-none">
               DECISION OUTCOME
             </span>
-            <span className="text-sm font-black tracking-wide leading-tight">
+            <span className="text-sm font-black tracking-wide leading-tight font-mono">
               {decision}
             </span>
           </div>
         </div>
       </div>
 
-      {/* 8-Switch Rocker Bank Grid */}
+      {/* 8-Switch Annunciator Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {switches.map((sw, index) => {
+        {activeGuardrails.map((sw, index) => {
           const isFlipped = flippedCount > index;
-          const passed = sw.isPassed;
+          const isPassed = sw.evaluated && sw.passed;
+          const isFailed = sw.evaluated && !sw.passed;
 
           return (
             <motion.div
-              key={sw.code}
+              key={sw.id}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, delay: index * 0.05 }}
-              className={`p-3.5 rounded-lg border transition-all flex flex-col justify-between min-h-[125px] ${
+              transition={{ duration: 0.2, delay: index * 0.04 }}
+              className={`p-3.5 rounded-lg border transition-all flex flex-col justify-between min-h-[135px] ${
                 !isFlipped
                   ? 'bg-[#121214] border-[#202024] opacity-50'
-                  : passed
-                    ? 'bg-[#18181B] border-[#383840] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_2px_4px_rgba(0,0,0,0.4)]'
-                    : 'bg-[#141416] border-2 border-[#71717A] shadow-[inset_0_2px_6px_rgba(0,0,0,0.9)]'
+                  : isFailed
+                    ? 'bg-[#1A1A1E] border-2 border-[#FAFAFA] shadow-[0_0_12px_rgba(255,255,255,0.15),inset_0_2px_6px_rgba(0,0,0,0.9)] ring-1 ring-[#FAFAFA]'
+                    : isPassed
+                      ? 'bg-[#18181B] border-[#383840] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_2px_4px_rgba(0,0,0,0.4)]'
+                      : 'bg-[#101012] border-[#202024] opacity-60'
               }`}
             >
-              {/* Top Row: Switch Plate Identifier & Status Rocker */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-[#27272A] border border-[#3F3F46] text-xs font-black font-mono text-[#FAFAFA]">
-                    {sw.letter}
+              {/* Top Row: Flex container with flex-shrink:0 on badge to prevent ANY overlap */}
+              <div className="flex items-start justify-between gap-2.5 w-full">
+                {/* Left: Identifier Ingot + Multi-line Wrapping Title */}
+                <div className="flex items-start gap-2 flex-1 min-w-0">
+                  <span
+                    className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-black font-mono flex-shrink-0 mt-0.5 ${
+                      isFailed
+                        ? 'bg-[#FAFAFA] text-[#0D0D0E] font-black'
+                        : isPassed
+                          ? 'bg-[#27272A] border border-[#3F3F46] text-[#FAFAFA]'
+                          : 'bg-[#18181B] text-[#71717A] border border-[#27272A]'
+                    }`}
+                  >
+                    {sw.id}
                   </span>
-                  <span className="text-xs font-bold tracking-tight text-[#E4E4E7]">
+                  <span
+                    className={`text-xs font-bold tracking-tight leading-snug break-words flex-1 ${
+                      isFailed ? 'text-[#FAFAFA] font-black' : isPassed ? 'text-[#E4E4E7]' : 'text-[#71717A]'
+                    }`}
+                  >
                     {sw.label}
                   </span>
                 </div>
 
-                {/* Tactile Rocker Indicator */}
+                {/* Right: Tactile Status Rocker Badge with flex-shrink:0 */}
                 <div
-                  className={`px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded-sm border ${
+                  className={`flex-shrink-0 px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded-sm border select-none ${
                     !isFlipped
                       ? 'bg-[#18181B] text-[#52525B] border-[#27272A]'
-                      : passed
-                        ? 'bg-[#FAFAFA] text-[#0D0D0E] border-[#FFFFFF] shadow-[0_1px_3px_rgba(0,0,0,0.5)]'
-                        : 'bg-[#202024] text-[#FAFAFA] border-[#71717A] shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]'
+                      : isFailed
+                        ? 'bg-[#FAFAFA] text-[#0D0D0E] border-[#FFFFFF] shadow-[0_2px_4px_rgba(0,0,0,0.5)] font-black'
+                        : isPassed
+                          ? 'bg-[#27272A] text-[#FAFAFA] border-[#3F3F46] shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]'
+                          : 'bg-[#141416] text-[#52525B] border-[#202024]'
                   }`}
                 >
-                  {!isFlipped ? '---' : passed ? '✓ ON' : '▲ TRIP'}
+                  {!isFlipped ? '---' : isFailed ? '▲ FAILED' : isPassed ? '✓ PASS' : '— IDLE'}
                 </div>
               </div>
 
-              {/* Bottom Row: Detail readout */}
-              <div className="mt-3 pt-2 border-t border-[#26262B]/80 text-[11px] leading-tight text-[#A1A1AA]">
-                {isFlipped ? sw.details : 'Awaiting interlock poll...'}
+              {/* Bottom Row: Detail / Telemetry Readout */}
+              <div
+                className={`mt-3 pt-2 border-t text-[11px] leading-tight font-mono ${
+                  isFailed
+                    ? 'border-[#52525B] text-[#FAFAFA] font-bold'
+                    : isPassed
+                      ? 'border-[#26262B]/80 text-[#A1A1AA]'
+                      : 'border-[#1E1E22] text-[#52525B]'
+                }`}
+              >
+                {!isFlipped
+                  ? 'Polling...'
+                  : isFailed
+                    ? `✕ TRIP: ${sw.reason || 'Guardrail boundary tripped'}`
+                    : isPassed
+                      ? (sw.reason || 'Verified & satisfied')
+                      : 'Not reached (short-circuited)'}
               </div>
             </motion.div>
           );
         })}
       </div>
 
-      {/* Physical Engraved Reason Plate */}
-      <div className="panel-recessed p-4 rounded-lg flex items-start gap-3">
-        <div className="text-sm text-[#A1A1AA] pt-0.5 select-none" aria-hidden="true">
-          ℹ
+      {/* Physical Engraved Rationale Plate with Direct Card Linkage */}
+      <div
+        className={`p-4 rounded-lg flex items-start gap-3 border ${
+          failedGuardrail
+            ? 'panel-raised border-2 border-[#71717A] bg-[#161618]'
+            : 'panel-recessed border-[#26262B]'
+        }`}
+      >
+        <div className="text-sm pt-0.5 select-none font-bold" aria-hidden="true">
+          {failedGuardrail ? '▲' : 'ℹ'}
         </div>
-        <div className="space-y-1">
-          <div className="text-[10px] font-bold tracking-wider text-[#71717A] uppercase">
-            POLICY ENGINE RATIONALE LOG
+        <div className="space-y-1 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold tracking-wider text-[#71717A] uppercase font-mono">
+              POLICY ENGINE RATIONALE LOG
+            </span>
+            {failedGuardrail && (
+              <span className="text-[10px] font-mono font-black uppercase px-2 py-0.2 rounded bg-[#FAFAFA] text-[#0D0D0E]">
+                GUARDRAIL {failedGuardrail.id} TRIGGERED
+              </span>
+            )}
           </div>
-          <p className="text-xs text-[#E4E4E7] leading-relaxed">
+          <p className="text-xs text-[#FAFAFA] font-mono leading-relaxed">
             {reason}
           </p>
         </div>

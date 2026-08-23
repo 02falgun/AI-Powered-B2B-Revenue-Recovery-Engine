@@ -423,6 +423,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     decision: finalDecision,
     reason: finalReason,
     guardrailTriggered: policyDecision.guardrailTriggered ?? null,
+    guardrailResults: policyDecision.guardrailResults ?? null,
     approvedAmountPaise: policyDecision.approvedAmountPaise,
     approvedAmountInr: policyDecision.approvedAmountInr,
     paymentLinkUrl,

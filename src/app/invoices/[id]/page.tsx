@@ -11,6 +11,8 @@ import { RazorpayCheckoutButton } from '@/components/RazorpayCheckoutButton';
 import { ProcessingIndicator } from '@/components/ui/ProcessingIndicator';
 import { UserNav } from '@/components/UserNav';
 
+import type { GuardrailResult } from '@/lib/policy';
+
 interface InvoiceData {
   readonly id: string;
   readonly invoiceNumber: string;
@@ -33,6 +35,7 @@ interface ProcessResult {
   readonly decision?: 'AUTO_RECOVER' | 'HUMAN_REVIEW';
   readonly reason?: string;
   readonly guardrailTriggered?: string | null;
+  readonly guardrailResults?: readonly GuardrailResult[] | null;
   readonly approvedAmountInr?: number | null;
   readonly approvedAmountPaise?: number | null;
   readonly paymentLinkUrl?: string | null;
@@ -187,6 +190,7 @@ export default function InvoiceSimulatorPage({ params }: { params: Promise<{ id:
           decision: data.decision,
           reason: data.reason,
           guardrailTriggered: data.guardrailTriggered,
+          guardrailResults: data.guardrailResults ?? null,
           approvedAmountInr: data.approvedAmountInr,
           approvedAmountPaise: data.approvedAmountPaise,
           paymentLinkUrl: data.paymentLinkUrl,
@@ -201,6 +205,7 @@ export default function InvoiceSimulatorPage({ params }: { params: Promise<{ id:
           decision: data.decision ?? 'HUMAN_REVIEW',
           reason: data.reason ?? 'AI intent extraction failure. Routed to HUMAN_REVIEW.',
           guardrailTriggered: data.guardrailTriggered ?? 'GUARDRAIL_F',
+          guardrailResults: data.guardrailResults ?? null,
           error: data.error,
         });
 
@@ -632,6 +637,7 @@ export default function InvoiceSimulatorPage({ params }: { params: Promise<{ id:
                     decision={result.decision ?? 'HUMAN_REVIEW'}
                     reason={result.reason ?? 'Policy evaluation completed'}
                     guardrailTriggered={result.guardrailTriggered}
+                    guardrailResults={result.guardrailResults}
                     confidence={result.confidence}
                     approvedAmountPaise={result.approvedAmountPaise}
                     outstandingAmountPaise={invoice!.outstandingAmountPaise}

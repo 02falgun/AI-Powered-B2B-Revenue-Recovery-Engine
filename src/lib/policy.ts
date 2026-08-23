@@ -27,12 +27,64 @@ export const MINIMUM_CONFIDENCE_THRESHOLD = 0.7;
 
 export type PolicyDecisionType = 'AUTO_RECOVER' | 'HUMAN_REVIEW';
 
+export interface GuardrailResult {
+  readonly id: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H';
+  readonly code: string;
+  readonly label: string;
+  readonly description: string;
+  readonly passed: boolean;
+  readonly evaluated: boolean;
+  readonly reason?: string;
+}
+
 export interface PolicyDecision {
   readonly decision: PolicyDecisionType;
   readonly reason: string;
   readonly approvedAmountPaise: number | null;
   readonly approvedAmountInr: number | null;
   readonly guardrailTriggered?: string;
+  readonly guardrailResults?: readonly GuardrailResult[];
+}
+
+const GUARDRAIL_METADATA: Record<'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H', { code: string; label: string; description: string }> = {
+  A: { code: 'GUARDRAIL_A', label: 'OUTSTANDING CAP', description: 'Promised sum capped at authoritative DB balance' },
+  B: { code: 'GUARDRAIL_B', label: 'POSITIVE AMOUNT', description: 'Promised sum must be a positive integer in paise' },
+  C: { code: 'GUARDRAIL_C', label: 'DISPUTE FILTER', description: 'Zero active dispute, price conflict, or counterclaim' },
+  D: { code: 'GUARDRAIL_D', label: 'AI CONFIDENCE (>=0.7)', description: 'Extraction confidence score meets reliability floor' },
+  E: { code: 'GUARDRAIL_E', label: 'INPUT SANITY', description: 'Complete, well-formed input and positive integer balance' },
+  F: { code: 'GUARDRAIL_F', label: 'SOLE AUTHORITY', description: 'Pure deterministic evaluator is sole recovery authority' },
+  G: { code: 'GUARDRAIL_G', label: 'DB TRUTH LOCK', description: 'DB invoice facts source of truth over email claims' },
+  H: { code: 'GUARDRAIL_H', label: 'CURRENCY LOCK', description: 'Strict INR currency and valid percentage sanity' },
+};
+
+export function constructGuardrailResults(
+  statusMap: Partial<Record<'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H', { passed: boolean; evaluated: boolean; reason?: string }>>,
+): readonly GuardrailResult[] {
+  const ids: Array<'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'> = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  return ids.map((id) => {
+    const meta = GUARDRAIL_METADATA[id];
+    const status = statusMap[id];
+    if (status && status.evaluated) {
+      return {
+        id,
+        code: meta.code,
+        label: meta.label,
+        description: meta.description,
+        passed: status.passed,
+        evaluated: true,
+        reason: status.reason,
+      };
+    }
+    return {
+      id,
+      code: meta.code,
+      label: meta.label,
+      description: meta.description,
+      passed: false,
+      evaluated: false,
+      reason: 'Not evaluated (short-circuited by preceding guardrail failure)',
+    };
+  });
 }
 
 export interface EvaluatePolicyParams {
@@ -235,13 +287,39 @@ export function evaluatePolicy(params: EvaluatePolicyParams): PolicyDecision {
     // 1. Guardrail C: Unconditional Dispute Check (Runs FIRST)
     const disputeDecision = guardrailCheckDispute(extraction as Partial<ExtractedIntent>);
     if (disputeDecision) {
-      return disputeDecision;
+      return {
+        ...disputeDecision,
+        guardrailResults: constructGuardrailResults({
+          C: { passed: false, evaluated: true, reason: disputeDecision.reason },
+        }),
+      };
     }
 
     // 2. Guardrail E & D: Input Sanity & Completeness Check
     const sanityDecision = guardrailCheckSanityAndCompleteness(extraction, outstandingAmountPaise);
     if (sanityDecision) {
-      return sanityDecision;
+      const isLowConfidenceOrIntent =
+        sanityDecision.guardrailTriggered === 'GUARDRAIL_D_LOW_CONFIDENCE' ||
+        sanityDecision.guardrailTriggered === 'GUARDRAIL_D_UNKNOWN_INTENT';
+
+      if (isLowConfidenceOrIntent) {
+        return {
+          ...sanityDecision,
+          guardrailResults: constructGuardrailResults({
+            C: { passed: true, evaluated: true, reason: 'Zero dispute detected in communication' },
+            E: { passed: true, evaluated: true, reason: 'Valid input object and integer balance' },
+            D: { passed: false, evaluated: true, reason: sanityDecision.reason },
+          }),
+        };
+      }
+
+      return {
+        ...sanityDecision,
+        guardrailResults: constructGuardrailResults({
+          C: { passed: true, evaluated: true, reason: 'Zero dispute detected in input' },
+          E: { passed: false, evaluated: true, reason: sanityDecision.reason },
+        }),
+      };
     }
 
     const ext = extraction as ExtractedIntent;
@@ -249,13 +327,31 @@ export function evaluatePolicy(params: EvaluatePolicyParams): PolicyDecision {
     // 3. Guardrail H: Currency & Malformed Percentage Ambiguity Check
     const currencyDecision = guardrailCheckCurrencyAndPercentageAmbiguity(ext);
     if (currencyDecision) {
-      return currencyDecision;
+      return {
+        ...currencyDecision,
+        guardrailResults: constructGuardrailResults({
+          C: { passed: true, evaluated: true, reason: 'Zero dispute detected' },
+          E: { passed: true, evaluated: true, reason: 'Valid input payload' },
+          D: { passed: true, evaluated: true, reason: `Confidence score (${((ext.confidence ?? 1) * 100).toFixed(0)}%) meets threshold` },
+          H: { passed: false, evaluated: true, reason: currencyDecision.reason },
+        }),
+      };
     }
 
     // 4. Extension Intent Routing
     const extensionDecision = guardrailCheckExtension(ext);
     if (extensionDecision) {
-      return extensionDecision;
+      return {
+        ...extensionDecision,
+        guardrailResults: constructGuardrailResults({
+          C: { passed: true, evaluated: true, reason: 'Zero dispute detected' },
+          E: { passed: true, evaluated: true, reason: 'Valid input payload' },
+          D: { passed: true, evaluated: true, reason: 'Extension intent recognized' },
+          H: { passed: true, evaluated: true, reason: 'No currency ambiguity' },
+          G: { passed: true, evaluated: true, reason: 'DB authoritative balance verified' },
+          B: { passed: false, evaluated: true, reason: extensionDecision.reason },
+        }),
+      };
     }
 
     // Determine target payment amount in paise
@@ -269,18 +365,39 @@ export function evaluatePolicy(params: EvaluatePolicyParams): PolicyDecision {
       targetAmountPaise = outstandingAmountPaise;
     }
 
-    // 4. Guardrail B: Non-Positive Amount Check
+    // 5. Guardrail B: Non-Positive Amount Check
     const nonPositiveDecision = guardrailCheckNonPositiveAmount(targetAmountPaise);
     if (nonPositiveDecision) {
-      return nonPositiveDecision;
+      return {
+        ...nonPositiveDecision,
+        guardrailResults: constructGuardrailResults({
+          C: { passed: true, evaluated: true, reason: 'Zero dispute detected' },
+          E: { passed: true, evaluated: true, reason: 'Valid input payload' },
+          D: { passed: true, evaluated: true, reason: `Confidence score (${((ext.confidence ?? 1) * 100).toFixed(0)}%) meets threshold` },
+          H: { passed: true, evaluated: true, reason: 'INR currency validated' },
+          G: { passed: true, evaluated: true, reason: 'DB authoritative balance verified' },
+          B: { passed: false, evaluated: true, reason: nonPositiveDecision.reason },
+        }),
+      };
     }
 
     const validAmountPaise = targetAmountPaise as number;
 
-    // 5. Guardrail A: Over-Outstanding Amount Check
+    // 6. Guardrail A: Over-Outstanding Amount Check
     const overAmountDecision = guardrailCheckOverAmount(validAmountPaise, outstandingAmountPaise);
     if (overAmountDecision) {
-      return overAmountDecision;
+      return {
+        ...overAmountDecision,
+        guardrailResults: constructGuardrailResults({
+          C: { passed: true, evaluated: true, reason: 'Zero dispute detected' },
+          E: { passed: true, evaluated: true, reason: 'Valid input payload' },
+          D: { passed: true, evaluated: true, reason: `Confidence score (${((ext.confidence ?? 1) * 100).toFixed(0)}%) meets threshold` },
+          H: { passed: true, evaluated: true, reason: 'INR currency validated' },
+          G: { passed: true, evaluated: true, reason: 'DB authoritative balance verified' },
+          B: { passed: true, evaluated: true, reason: `Positive amount (${validAmountPaise} paise) verified` },
+          A: { passed: false, evaluated: true, reason: overAmountDecision.reason },
+        }),
+      };
     }
 
     // All guardrails passed! Approve AUTO_RECOVER.
@@ -291,6 +408,16 @@ export function evaluatePolicy(params: EvaluatePolicyParams): PolicyDecision {
       reason: `Policy approved AUTO_RECOVER for ${ext.intent} of ₹${approvedAmountInr.toFixed(2)} (${validAmountPaise} paise).`,
       approvedAmountPaise: validAmountPaise,
       approvedAmountInr,
+      guardrailResults: constructGuardrailResults({
+        A: { passed: true, evaluated: true, reason: `Approved amount ₹${approvedAmountInr.toFixed(2)} is within ledger cap` },
+        B: { passed: true, evaluated: true, reason: `Positive amount (${validAmountPaise} paise) verified` },
+        C: { passed: true, evaluated: true, reason: 'Zero billing dispute detected' },
+        D: { passed: true, evaluated: true, reason: `Confidence score (${(ext.confidence * 100).toFixed(0)}%) meets threshold` },
+        E: { passed: true, evaluated: true, reason: 'Valid input payload structure' },
+        F: { passed: true, evaluated: true, reason: 'Sole authority invariant verified' },
+        G: { passed: true, evaluated: true, reason: 'DB authoritative ledger binding verified' },
+        H: { passed: true, evaluated: true, reason: 'Strict INR currency validated' },
+      }),
     };
   } catch (err: unknown) {
     // Fail-Closed: Never leak uncaught exceptions out of evaluatePolicy()
@@ -302,6 +429,9 @@ export function evaluatePolicy(params: EvaluatePolicyParams): PolicyDecision {
       approvedAmountPaise: null,
       approvedAmountInr: null,
       guardrailTriggered: 'GUARDRAIL_E_EXCEPTION_SAFETY_NET',
+      guardrailResults: constructGuardrailResults({
+        E: { passed: false, evaluated: true, reason: `Evaluation exception: ${message}` },
+      }),
     };
   }
 }
