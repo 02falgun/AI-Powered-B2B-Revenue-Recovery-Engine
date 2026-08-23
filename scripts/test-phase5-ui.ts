@@ -126,6 +126,12 @@ async function runPhase5UITests(): Promise<void> {
     guardrailF_in_dispute !== undefined && guardrailF_in_dispute.evaluated === false,
   );
 
+  const idleCountInDispute = shortcut2Policy.guardrailResults?.filter((g) => !g.evaluated).length;
+  assert(
+    'Dispute case short-circuits to exactly 1 failed guardrail (C) and 7 idle guardrails (A, B, D, E, F, G, H)',
+    idleCountInDispute === 7,
+  );
+
   const allPassed = shortcut1Policy.guardrailResults?.every((g) => g.passed && g.evaluated);
   assert(
     'AUTO_RECOVER case marks all 8 guardrails as passed=true and evaluated=true',

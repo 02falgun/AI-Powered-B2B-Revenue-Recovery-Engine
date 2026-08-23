@@ -153,16 +153,58 @@ function deriveGuardrailsFromInputs(props: PolicyGuardrailBreakdownProps): reado
 }
 
 /**
- * PolicyGuardrailBreakdown — THE SIGNATURE ELEMENT (Physical Toggle-Switch Bank).
+ * Unified Status Rocker Badge with flex-shrink: 0 and robust icon spacing.
+ */
+function GuardrailBadge({
+  state,
+  isFlipped,
+}: {
+  readonly state: 'passed' | 'failed' | 'idle';
+  readonly isFlipped: boolean;
+}) {
+  if (!isFlipped) {
+    return (
+      <div className="flex-shrink-0 inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded-sm border select-none bg-[#18181B] text-[#52525B] border-[#27272A] min-w-[62px]">
+        ---
+      </div>
+    );
+  }
+
+  if (state === 'failed') {
+    return (
+      <div className="flex-shrink-0 inline-flex items-center justify-center gap-1 px-2 py-0.5 text-[10px] font-mono font-black uppercase rounded-sm border select-none bg-[#FAFAFA] text-[#0D0D0E] border-[#FFFFFF] shadow-[0_2px_4px_rgba(0,0,0,0.5)] min-w-[62px]">
+        <span aria-hidden="true">▲</span>
+        <span>TRIP</span>
+      </div>
+    );
+  }
+
+  if (state === 'passed') {
+    return (
+      <div className="flex-shrink-0 inline-flex items-center justify-center gap-1 px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded-sm border select-none bg-[#27272A] text-[#FAFAFA] border-[#3F3F46] shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] min-w-[62px]">
+        <span aria-hidden="true">✓</span>
+        <span>PASS</span>
+      </div>
+    );
+  }
+
+  // Idle state
+  return (
+    <div className="flex-shrink-0 inline-flex items-center justify-center gap-1 px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded-sm border select-none bg-[#141416] text-[#71717A] border-[#26262B] min-w-[62px]">
+      <span aria-hidden="true">—</span>
+      <span>IDLE</span>
+    </div>
+  );
+}
+
+/**
+ * PolicyGuardrailBreakdown — THE SIGNATURE ELEMENT (Full-Width Physical Annunciator Rack).
  *
- * Renders an 8-switch breaker annunciator rack in an industrial instrument chassis.
+ * Renders an 8-switch breaker annunciator rack spanning the full content width.
  * Each switch displays one of 3 distinct real-world states:
  * 1. PASSED: Checked and passed (clean illuminated plate).
  * 2. FAILED: Checked and failed (high-contrast flagged breaker with failure reason).
  * 3. NOT EVALUATED: Short-circuited / not reached (dimmed neutral idle state).
- *
- * Layout uses responsive flex layout with flex-shrink:0 on status badges to ensure
- * multi-line wrapped titles NEVER overlap or clip badges.
  */
 export function PolicyGuardrailBreakdown(props: PolicyGuardrailBreakdownProps) {
   const { decision, reason, guardrailResults } = props;
@@ -183,7 +225,7 @@ export function PolicyGuardrailBreakdown(props: PolicyGuardrailBreakdownProps) {
     activeGuardrails.forEach((_, idx) => {
       const timer = setTimeout(() => {
         setFlippedCount((prev) => Math.max(prev, idx + 1));
-      }, (idx + 1) * 60);
+      }, (idx + 1) * 50);
       timers.push(timer);
     });
 
@@ -193,7 +235,7 @@ export function PolicyGuardrailBreakdown(props: PolicyGuardrailBreakdownProps) {
   }, [decision, props.guardrailTriggered]);
 
   return (
-    <div className="panel-raised p-6 rounded-xl space-y-6">
+    <div className="panel-raised p-6 rounded-xl space-y-6 w-full">
       {/* Control Bank Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#26262B]">
         <div>
@@ -230,33 +272,34 @@ export function PolicyGuardrailBreakdown(props: PolicyGuardrailBreakdownProps) {
         </div>
       </div>
 
-      {/* 8-Switch Annunciator Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* 8-Switch Annunciator Grid across 4 Full-Width Columns */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
         {activeGuardrails.map((sw, index) => {
           const isFlipped = flippedCount > index;
           const isPassed = sw.evaluated && sw.passed;
           const isFailed = sw.evaluated && !sw.passed;
+          const state: 'passed' | 'failed' | 'idle' = isFailed ? 'failed' : isPassed ? 'passed' : 'idle';
 
           return (
             <motion.div
               key={sw.id}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, delay: index * 0.04 }}
-              className={`p-3.5 rounded-lg border transition-all flex flex-col justify-between min-h-[135px] ${
+              transition={{ duration: 0.2, delay: index * 0.03 }}
+              className={`p-4 rounded-lg border transition-all flex flex-col justify-between min-h-[140px] ${
                 !isFlipped
                   ? 'bg-[#121214] border-[#202024] opacity-50'
                   : isFailed
-                    ? 'bg-[#1A1A1E] border-2 border-[#FAFAFA] shadow-[0_0_12px_rgba(255,255,255,0.15),inset_0_2px_6px_rgba(0,0,0,0.9)] ring-1 ring-[#FAFAFA]'
+                    ? 'bg-[#1A1A1E] border-2 border-[#FAFAFA] shadow-[0_0_14px_rgba(255,255,255,0.15),inset_0_2px_6px_rgba(0,0,0,0.9)] ring-1 ring-[#FAFAFA]'
                     : isPassed
                       ? 'bg-[#18181B] border-[#383840] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_2px_4px_rgba(0,0,0,0.4)]'
                       : 'bg-[#101012] border-[#202024] opacity-60'
               }`}
             >
               {/* Top Row: Flex container with flex-shrink:0 on badge to prevent ANY overlap */}
-              <div className="flex items-start justify-between gap-2.5 w-full">
+              <div className="flex items-start justify-between gap-3 w-full">
                 {/* Left: Identifier Ingot + Multi-line Wrapping Title */}
-                <div className="flex items-start gap-2 flex-1 min-w-0">
+                <div className="flex items-start gap-2.5 flex-1 min-w-0">
                   <span
                     className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-black font-mono flex-shrink-0 mt-0.5 ${
                       isFailed
@@ -277,20 +320,8 @@ export function PolicyGuardrailBreakdown(props: PolicyGuardrailBreakdownProps) {
                   </span>
                 </div>
 
-                {/* Right: Tactile Status Rocker Badge with flex-shrink:0 */}
-                <div
-                  className={`flex-shrink-0 px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded-sm border select-none ${
-                    !isFlipped
-                      ? 'bg-[#18181B] text-[#52525B] border-[#27272A]'
-                      : isFailed
-                        ? 'bg-[#FAFAFA] text-[#0D0D0E] border-[#FFFFFF] shadow-[0_2px_4px_rgba(0,0,0,0.5)] font-black'
-                        : isPassed
-                          ? 'bg-[#27272A] text-[#FAFAFA] border-[#3F3F46] shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]'
-                          : 'bg-[#141416] text-[#52525B] border-[#202024]'
-                  }`}
-                >
-                  {!isFlipped ? '---' : isFailed ? '▲ FAILED' : isPassed ? '✓ PASS' : '— IDLE'}
-                </div>
+                {/* Right: Unified Status Badge Component */}
+                <GuardrailBadge state={state} isFlipped={isFlipped} />
               </div>
 
               {/* Bottom Row: Detail / Telemetry Readout */}
@@ -318,7 +349,7 @@ export function PolicyGuardrailBreakdown(props: PolicyGuardrailBreakdownProps) {
 
       {/* Physical Engraved Rationale Plate with Direct Card Linkage */}
       <div
-        className={`p-4 rounded-lg flex items-start gap-3 border ${
+        className={`p-4 rounded-lg flex items-start gap-3 border w-full ${
           failedGuardrail
             ? 'panel-raised border-2 border-[#71717A] bg-[#161618]'
             : 'panel-recessed border-[#26262B]'

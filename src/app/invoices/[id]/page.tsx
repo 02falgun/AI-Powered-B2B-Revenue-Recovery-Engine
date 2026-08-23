@@ -10,7 +10,6 @@ import { AuditTimeline, type AuditLogEntry } from '@/components/ui/AuditTimeline
 import { RazorpayCheckoutButton } from '@/components/RazorpayCheckoutButton';
 import { ProcessingIndicator } from '@/components/ui/ProcessingIndicator';
 import { UserNav } from '@/components/UserNav';
-
 import type { GuardrailResult } from '@/lib/policy';
 
 interface InvoiceData {
@@ -46,19 +45,19 @@ interface ProcessResult {
 const SHORTCUT_PRESETS = [
   {
     label: 'Partial Payment (50%)',
-    description: 'Commits to clearing 50% of the outstanding invoice balance immediately.',
+    description: 'Commits to clearing 50% of the balance today.',
     intent: 'pay',
     text: `Hello, regarding invoice INV-2026-001, we can clear 50% of the balance today. Please send us the payment link for half the amount and we will process it immediately.`,
   },
   {
     label: 'Billing Dispute',
-    description: 'Voices rate discrepancy and refuses payment until adjustment is verified.',
+    description: 'Voices rate discrepancy and refuses payment.',
     intent: 'dispute',
     text: `We are disputing this invoice. The software license rate quoted was lower than billed on invoice INV-2026-001. We will NOT pay until this overcharge is corrected.`,
   },
   {
-    label: 'Overpayment Commitment',
-    description: 'Promises an amount exceeding ledger balance (trips Cap Guardrail).',
+    label: 'Overpayment Attempt',
+    description: 'Promises sum exceeding ledger balance (trips Cap).',
     intent: 'overpay',
     text: `Hi Team, we will transfer 1,000,000 INR for invoice INV-2026-001 immediately. Please confirm receipt.`,
   },
@@ -272,8 +271,8 @@ export default function InvoiceSimulatorPage({ params }: { params: Promise<{ id:
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-        {/* ── Invoice Instrument Summary Card ──────── */}
-        <div className="panel-raised rounded-xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        {/* ── Invoice Instrument Summary Card (Full-Width) ──────── */}
+        <div className="panel-raised rounded-xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 w-full">
           <div className="space-y-2">
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-black font-mono text-[#FAFAFA] tracking-tight">
@@ -355,296 +354,257 @@ export default function InvoiceSimulatorPage({ params }: { params: Promise<{ id:
         {activeTab === 'timeline' ? (
           <AuditTimeline logs={auditLogs} />
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* ── Left: Email Simulator ────────────── */}
-            <div className="space-y-4">
-              <div className="panel-raised rounded-xl p-6 space-y-5">
-                <div>
-                  <h2 className="text-base font-bold text-[#FAFAFA] font-display">
-                    Buyer Communication Simulator
-                  </h2>
-                  <p className="text-xs text-[#A1A1AA] mt-0.5">
-                    Inject buyer email text to test AI extraction and guardrail policy resolution.
-                  </p>
-                </div>
-
-                {/* Simulation Presets */}
-                <div className="space-y-2">
-                  <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider block font-bold">
-                    PRESET STIMULI
-                  </span>
-                  <div className="grid grid-cols-1 gap-2">
-                    {SHORTCUT_PRESETS.map((preset) => (
-                      <button
-                        key={preset.label}
-                        type="button"
-                        onClick={() => setEmailText(preset.text)}
-                        className="text-left p-3 rounded-lg border border-[#2A2A30] bg-[#121214] hover:bg-[#1C1C20] hover:border-[#3F3F46] active:translate-y-[1px] transition-all group"
-                      >
-                        <div className="flex justify-between items-center text-xs font-bold text-[#FAFAFA]">
-                          <span>{preset.label}</span>
-                          <span className="text-[10px] text-[#71717A] group-hover:text-[#FAFAFA] font-mono transition-colors">
-                            Load Input →
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-[#A1A1AA] mt-0.5 line-clamp-1">
-                          {preset.description}
-                        </p>
-                      </button>
-                    ))}
+          <div className="space-y-8 w-full">
+            {/* ── Upper Section: Simulator Deck & AI Telemetry ──── */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Left: Communication Simulator (7 cols) */}
+              <div className="lg:col-span-7 space-y-4">
+                <div className="panel-raised rounded-xl p-6 space-y-5">
+                  <div>
+                    <h2 className="text-base font-bold text-[#FAFAFA] font-display">
+                      Buyer Communication Simulator
+                    </h2>
+                    <p className="text-xs text-[#A1A1AA] mt-0.5">
+                      Inject buyer email text to test AI intent extraction and deterministic policy interlocks.
+                    </p>
                   </div>
+
+                  {/* Simulation Presets */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider block font-bold">
+                      PRESET STIMULI
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {SHORTCUT_PRESETS.map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => setEmailText(preset.text)}
+                          className="text-left p-3 rounded-lg border border-[#2A2A30] bg-[#121214] hover:bg-[#1C1C20] hover:border-[#3F3F46] active:translate-y-[1px] transition-all group flex flex-col justify-between"
+                        >
+                          <div className="flex justify-between items-center text-xs font-bold text-[#FAFAFA]">
+                            <span className="truncate">{preset.label}</span>
+                            <span className="text-[10px] text-[#71717A] group-hover:text-[#FAFAFA] font-mono transition-colors ml-1">
+                              →
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-[#A1A1AA] mt-1 line-clamp-2 leading-tight">
+                            {preset.description}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Raw Input Textarea */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider block font-bold">
+                      RAW BUYER MESSAGE BODY
+                    </span>
+                    <textarea
+                      id="email-input"
+                      value={emailText}
+                      onChange={(e) => setEmailText(e.target.value)}
+                      placeholder="Paste communication payload here or select a preset..."
+                      rows={6}
+                      aria-label="Buyer email text input"
+                      className="w-full panel-recessed rounded-lg p-4 text-sm text-[#FAFAFA] placeholder:text-[#52525B] font-mono leading-relaxed resize-none focus:border-[#FAFAFA] focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  {/* Primary Action Button */}
+                  <button
+                    type="button"
+                    onClick={handleProcessEmail}
+                    disabled={processing || !emailText.trim()}
+                    className="btn-mechanical-primary w-full py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-sm disabled:opacity-40"
+                  >
+                    {processing ? (
+                      <>
+                        <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                        <span>Evaluating Policy Interlocks...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span aria-hidden="true">⚙</span>
+                        <span>Process Email & Run Policy Interlocks</span>
+                      </>
+                    )}
+                  </button>
                 </div>
 
-                {/* Raw Input Textarea */}
-                <div className="space-y-2">
-                  <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider block font-bold">
-                    RAW BUYER MESSAGE BODY
-                  </span>
-                  <textarea
-                    id="email-input"
-                    value={emailText}
-                    onChange={(e) => setEmailText(e.target.value)}
-                    placeholder="Paste communication payload here or select a preset..."
-                    rows={7}
-                    aria-label="Buyer email text input"
-                    className="w-full panel-recessed rounded-lg p-4 text-sm text-[#FAFAFA] placeholder:text-[#52525B] font-mono leading-relaxed resize-none focus:border-[#FAFAFA] focus:outline-none transition-colors"
-                  />
-                </div>
+                {/* Multi-stage Telemetry Indicator */}
+                <ProcessingIndicator isProcessing={processing} />
 
-                {/* Primary Action Button */}
-                <button
-                  type="button"
-                  onClick={handleProcessEmail}
-                  disabled={processing || !emailText.trim()}
-                  className="btn-mechanical-primary w-full py-3 px-4 rounded-lg flex items-center justify-center gap-2 text-sm disabled:opacity-40"
-                >
-                  {processing ? (
-                    <>
-                      <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                      <span>Evaluating Policy Interlocks...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span aria-hidden="true">⚙</span>
-                      <span>Process Email & Run Policy Interlocks</span>
-                    </>
+                {/* Operator Warning Banner */}
+                <AnimatePresence>
+                  {operatorError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      role="alert"
+                      className="p-4 rounded-lg border-2 border-[#71717A] bg-[#18181B] space-y-1"
+                    >
+                      <p className="font-bold text-xs text-[#FAFAFA] flex items-center gap-2">
+                        <span>▲</span> Notice for Operator
+                      </p>
+                      <p className="text-xs text-[#A1A1AA] leading-relaxed">{operatorError}</p>
+                    </motion.div>
                   )}
-                </button>
+                </AnimatePresence>
               </div>
 
-              {/* Multi-stage Telemetry Indicator */}
-              <ProcessingIndicator isProcessing={processing} />
-
-              {/* Operator Warning Banner */}
-              <AnimatePresence>
-                {operatorError && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    role="alert"
-                    className="p-4 rounded-lg border-2 border-[#71717A] bg-[#18181B] space-y-1"
-                  >
-                    <p className="font-bold text-xs text-[#FAFAFA] flex items-center gap-2">
-                      <span>▲</span> Notice for Operator
-                    </p>
-                    <p className="text-xs text-[#A1A1AA] leading-relaxed">{operatorError}</p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* ── Right: Decision Result ───────────── */}
-            <div className="space-y-5">
-              {!result ? (
-                <div className="panel-recessed rounded-xl p-12 text-center space-y-3">
-                  <div className="text-2xl text-[#52525B]" aria-hidden="true">
-                    ⚙
-                  </div>
-                  <p className="text-sm font-bold text-[#A1A1AA]">
-                    Awaiting Stimulus Evaluation
-                  </p>
-                  <p className="text-xs text-[#71717A] max-w-sm mx-auto">
-                    Input a buyer email on the left and engage the processor to trigger intent extraction and guardrail validation.
-                  </p>
-                </div>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.2 }}
-                  className="space-y-5"
-                >
-                  {/* Decision Outcome Banner */}
-                  <div className="panel-raised rounded-xl p-5 space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] uppercase tracking-widest font-mono text-[#71717A] font-bold">
-                        EVALUATION SUMMARY
-                      </span>
-                      <span
-                        className={`px-3 py-1 text-xs font-black font-mono rounded border ${
-                          result.decision === 'AUTO_RECOVER'
-                            ? 'bg-[#FAFAFA] text-[#0D0D0E] border-[#FFFFFF] shadow-[0_2px_4px_rgba(0,0,0,0.5)]'
-                            : 'bg-[#18181B] text-[#FAFAFA] border-2 border-[#71717A]'
-                        }`}
-                      >
-                        {result.decision ?? 'HUMAN_REVIEW'}
-                      </span>
+              {/* Right: Decision Output & AI Telemetry (5 cols) */}
+              <div className="lg:col-span-5 space-y-4">
+                {!result ? (
+                  <div className="panel-recessed rounded-xl p-10 text-center space-y-3 h-full flex flex-col items-center justify-center min-h-[340px]">
+                    <div className="text-3xl text-[#52525B]" aria-hidden="true">
+                      ⚙
                     </div>
-
-                    <p className="text-sm font-bold text-[#FAFAFA] leading-relaxed">
-                      {result.reason}
+                    <p className="text-sm font-bold text-[#A1A1AA]">
+                      Awaiting Stimulus Evaluation
                     </p>
-
-                    {result.approvedAmountInr && (
-                      <div className="pt-3 border-t border-[#26262B] flex justify-between items-center">
-                        <span className="text-xs text-[#A1A1AA] font-mono">
-                          Approved Recovery Amount
+                    <p className="text-xs text-[#71717A] max-w-xs mx-auto leading-relaxed">
+                      Select a preset on the left or paste buyer email text, then run the policy evaluator to see AI telemetry.
+                    </p>
+                  </div>
+                ) : (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-4"
+                  >
+                    {/* Decision Outcome Card */}
+                    <div className="panel-raised rounded-xl p-5 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] uppercase tracking-widest font-mono text-[#71717A] font-bold">
+                          EVALUATION SUMMARY
                         </span>
-                        <span className="font-mono font-black text-2xl text-[#FAFAFA]">
-                          ₹{result.approvedAmountInr.toFixed(2)}
+                        <span
+                          className={`px-3 py-1 text-xs font-black font-mono rounded border ${
+                            result.decision === 'AUTO_RECOVER'
+                              ? 'bg-[#FAFAFA] text-[#0D0D0E] border-[#FFFFFF] shadow-[0_2px_4px_rgba(0,0,0,0.5)]'
+                              : 'bg-[#18181B] text-[#FAFAFA] border-2 border-[#71717A]'
+                          }`}
+                        >
+                          {result.decision ?? 'HUMAN_REVIEW'}
                         </span>
                       </div>
-                    )}
-                  </div>
 
-                  {/* Payment Link Generated or Human Review Notification */}
-                  {result.decision === 'AUTO_RECOVER' && result.paymentLinkUrl ? (
-                    <div className="panel-raised rounded-xl p-5 space-y-4 border border-[#52525B]">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-[#FAFAFA]" aria-hidden="true" />
-                          <span className="text-sm font-bold text-[#FAFAFA]">
-                            Payment Link Issued
+                      <p className="text-xs font-bold text-[#FAFAFA] leading-relaxed font-mono">
+                        {result.reason}
+                      </p>
+
+                      {result.approvedAmountInr && (
+                        <div className="pt-2 border-t border-[#26262B] flex justify-between items-center">
+                          <span className="text-xs text-[#A1A1AA] font-mono">Approved Recovery</span>
+                          <span className="font-mono font-black text-xl text-[#FAFAFA]">
+                            ₹{result.approvedAmountInr.toFixed(2)}
                           </span>
                         </div>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#202024] border border-[#52525B] text-[#FAFAFA] font-bold">
-                          ⚡ TEST MODE LINK
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#A1A1AA] font-mono">
-                        Reference: <code className="text-[#FAFAFA]">{result.paymentLinkId}</code>
-                      </p>
-                      <a
-                        href={result.paymentLinkUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn-mechanical-primary inline-flex items-center justify-center gap-2 w-full py-3 px-4 rounded-lg text-sm"
-                      >
-                        <span>Open Razorpay Test Payment Link</span>
-                        <span aria-hidden="true">→</span>
-                      </a>
-                      <div className="text-[10px] font-mono text-center text-[#71717A] pt-1">
-                        Test Mode Only — Non-settling transaction simulation
-                      </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="panel-raised rounded-xl p-5 space-y-4 border-2 border-[#71717A]" role="alert">
-                      <div className="flex items-center gap-2 text-[#FAFAFA]">
-                        <span aria-hidden="true">▲</span>
-                        <span className="text-sm font-bold">Manual Human Review Required</span>
-                      </div>
-                      <p className="text-xs text-[#A1A1AA] leading-relaxed">
-                        The Policy Engine routed this case to{' '}
-                        <strong className="text-[#FAFAFA]">HUMAN_REVIEW</strong>. No automatic monetary actions or links were issued.
-                      </p>
 
-                      {/* Admin Override Action Section */}
-                      <div className="pt-3 border-t border-[#26262B] space-y-2.5">
+                    {/* Payment Link Generated or Human Review Notice */}
+                    {result.decision === 'AUTO_RECOVER' && result.paymentLinkUrl ? (
+                      <div className="panel-raised rounded-xl p-4 space-y-3 border border-[#52525B]">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-mono text-[#71717A] uppercase tracking-wider font-bold">
-                            GOVERNANCE CONTROL
+                          <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-[#FAFAFA]" aria-hidden="true" />
+                            <span className="text-xs font-bold text-[#FAFAFA]">Payment Link Issued</span>
+                          </div>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#202024] border border-[#52525B] text-[#FAFAFA] font-bold">
+                            ⚡ TEST MODE LINK
                           </span>
-                          <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-[#202024] border border-[#383840] text-[#D4D4D8]">
+                        </div>
+                        <a
+                          href={result.paymentLinkUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn-mechanical-primary inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg text-xs"
+                        >
+                          <span>Open Razorpay Test Payment Link</span>
+                          <span aria-hidden="true">→</span>
+                        </a>
+                        <div className="text-[10px] font-mono text-center text-[#71717A] pt-1">
+                          Test Mode Only — Non-settling transaction simulation
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="panel-raised rounded-xl p-4 space-y-3 border-2 border-[#71717A]" role="alert">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-[#FAFAFA]">
+                            <span aria-hidden="true">▲</span>
+                            <span className="text-xs font-bold">Manual Human Review Required</span>
+                          </div>
+                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.2 rounded bg-[#202024] text-[#A1A1AA] border border-[#383840]">
                             Role: {currentUser?.role || 'Guest'}
                           </span>
                         </div>
 
-                        {currentUser?.role === 'admin' ? (
-                          <div className="space-y-2">
-                            <button
-                              type="button"
-                              onClick={() => handleAdminOverride('in_recovery')}
-                              disabled={overriding}
-                              className="btn-mechanical-secondary w-full py-2.5 px-4 rounded text-xs"
-                            >
-                              {overriding ? 'Authorizing Admin Override...' : 'Authorize Manual Recovery (Admin Override)'}
-                            </button>
-                            {overrideMessage && (
-                              <p className="text-[11px] font-mono text-[#FAFAFA] text-center">
-                                ✓ {overrideMessage}
-                              </p>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="p-2.5 rounded panel-recessed text-center">
-                            <p className="text-[11px] text-[#71717A]">
-                              🔒 Status override requires <strong className="text-[#FAFAFA]">Administrator</strong> privileges.
-                            </p>
-                          </div>
+                        {currentUser?.role === 'admin' && (
+                          <button
+                            type="button"
+                            onClick={() => handleAdminOverride('in_recovery')}
+                            disabled={overriding}
+                            className="btn-mechanical-secondary w-full py-2 px-3 rounded text-xs"
+                          >
+                            {overriding ? 'Authorizing Admin Override...' : 'Authorize Manual Recovery (Admin Override)'}
+                          </button>
+                        )}
+                        {overrideMessage && (
+                          <p className="text-[10px] font-mono text-[#FAFAFA] text-center">
+                            ✓ {overrideMessage}
+                          </p>
                         )}
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* AI Intent Extraction Readout */}
-                  <div className="panel-raised rounded-xl p-5 space-y-4">
-                    <h3 className="text-sm font-bold text-[#FAFAFA] font-display">
-                      AI Intent Telemetry Readout
-                    </h3>
-
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div className="panel-recessed p-3 rounded-lg space-y-1">
-                        <span className="text-[10px] text-[#71717A] font-mono block uppercase font-bold">
-                          EXTRACTED INTENT
-                        </span>
-                        <span className="font-mono font-bold text-[#FAFAFA] capitalize text-sm">
-                          {result.intent ?? 'unknown'}
-                        </span>
+                    {/* AI Intent Extraction Readout */}
+                    <div className="panel-raised rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="panel-recessed px-3 py-2 rounded flex-1 mr-2 space-y-0.5">
+                          <span className="text-[9px] text-[#71717A] font-mono block uppercase font-bold">Intent</span>
+                          <span className="font-mono font-bold text-[#FAFAFA] capitalize text-xs">{result.intent ?? 'unknown'}</span>
+                        </div>
+                        <div className="panel-recessed px-3 py-2 rounded flex-1 space-y-0.5">
+                          <span className="text-[9px] text-[#71717A] font-mono block uppercase font-bold">Confidence</span>
+                          <span className="font-mono font-bold text-[#FAFAFA] text-xs">{result.confidence ? `${(result.confidence * 100).toFixed(1)}%` : '—'}</span>
+                        </div>
                       </div>
-                      <div className="panel-recessed p-3 rounded-lg space-y-1">
-                        <span className="text-[10px] text-[#71717A] font-mono block uppercase font-bold">
-                          CONFIDENCE
-                        </span>
-                        <span className="font-mono font-bold text-[#FAFAFA] text-sm">
-                          {result.confidence ? `${(result.confidence * 100).toFixed(1)}%` : '—'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 text-xs">
-                      <div>
-                        <span className="text-[10px] text-[#71717A] font-mono block uppercase font-bold mb-1">
-                          Rationale
-                        </span>
-                        <p className="text-[#D4D4D8] panel-recessed p-3 rounded leading-relaxed">
+                      <div className="text-xs space-y-1">
+                        <span className="text-[9px] text-[#71717A] font-mono block uppercase font-bold">Rationale</span>
+                        <p className="text-[#D4D4D8] panel-recessed p-2.5 rounded leading-relaxed text-[11px]">
                           {result.rationale ?? 'N/A'}
                         </p>
                       </div>
-                      <div>
-                        <span className="text-[10px] text-[#71717A] font-mono block uppercase font-bold mb-1">
-                          Extracted Evidence
-                        </span>
-                        <blockquote className="italic text-[#A1A1AA] panel-recessed p-3 rounded leading-relaxed border-l-2 border-l-[#52525B]">
-                          &ldquo;{result.evidence ?? 'N/A'}&rdquo;
-                        </blockquote>
-                      </div>
                     </div>
-                  </div>
-
-                  {/* 8-Switch Guardrail Annunciator Rack — SIGNATURE ELEMENT */}
-                  <PolicyGuardrailBreakdown
-                    decision={result.decision ?? 'HUMAN_REVIEW'}
-                    reason={result.reason ?? 'Policy evaluation completed'}
-                    guardrailTriggered={result.guardrailTriggered}
-                    guardrailResults={result.guardrailResults}
-                    confidence={result.confidence}
-                    approvedAmountPaise={result.approvedAmountPaise}
-                    outstandingAmountPaise={invoice!.outstandingAmountPaise}
-                  />
-                </motion.div>
-              )}
+                  </motion.div>
+                )}
+              </div>
             </div>
+
+            {/* ── Section 2: Full-Width Signature Guardrail Panel (Rack-08) ──── */}
+            {result && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="w-full pt-2"
+              >
+                <PolicyGuardrailBreakdown
+                  decision={result.decision ?? 'HUMAN_REVIEW'}
+                  reason={result.reason ?? 'Policy evaluation completed'}
+                  guardrailTriggered={result.guardrailTriggered}
+                  guardrailResults={result.guardrailResults}
+                  confidence={result.confidence}
+                  approvedAmountPaise={result.approvedAmountPaise}
+                  outstandingAmountPaise={invoice!.outstandingAmountPaise}
+                />
+              </motion.div>
+            )}
           </div>
         )}
       </main>
