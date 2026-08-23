@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { zodResponseFormat } from 'openai/helpers/zod';
 import { SYSTEM_PROMPT } from './ai-prompt';
 import { ExtractionSchema, validateAndSanitizeExtraction, type ExtractedIntent } from './ai-schema';
+import { withRetry } from './retry';
 import type { Result, AppError } from './types';
 
 export interface ExtractIntentParams {
@@ -54,41 +55,48 @@ async function extractWithGemini(
   const ai = new GoogleGenAI({ apiKey: geminiKey });
 
   try {
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        const timeoutErr = new Error(`Gemini extraction timed out after ${timeoutMs}ms.`);
-        timeoutErr.name = 'AbortError';
-        reject(timeoutErr);
-      }, timeoutMs);
-    });
+    const response = await withRetry(
+      async () => {
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            const timeoutErr = new Error(`Gemini extraction timed out after ${timeoutMs}ms.`);
+            timeoutErr.name = 'AbortError';
+            reject(timeoutErr);
+          }, timeoutMs);
+        });
 
-    const response = await Promise.race([
-      ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: `${SYSTEM_PROMPT}\n\n${userPrompt}`,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              intent: {
-                type: Type.STRING,
-                enum: ['full_payment', 'partial_payment', 'dispute', 'extension', 'unknown'],
+        return await Promise.race([
+          ai.models.generateContent({
+            model: 'gemini-3.6-flash',
+            contents: `${SYSTEM_PROMPT}\n\n${userPrompt}`,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  intent: {
+                    type: Type.STRING,
+                    enum: ['full_payment', 'partial_payment', 'dispute', 'extension', 'unknown'],
+                  },
+                  promised_amount_inr: { type: Type.NUMBER },
+                  promised_date: { type: Type.STRING },
+                  dispute_present: { type: Type.BOOLEAN },
+                  confidence: { type: Type.NUMBER },
+                  rationale: { type: Type.STRING },
+                  evidence: { type: Type.STRING },
+                },
+                required: ['intent', 'dispute_present', 'confidence', 'rationale', 'evidence'],
               },
-              promised_amount_inr: { type: Type.NUMBER },
-              promised_date: { type: Type.STRING },
-              dispute_present: { type: Type.BOOLEAN },
-              confidence: { type: Type.NUMBER },
-              rationale: { type: Type.STRING },
-              evidence: { type: Type.STRING },
+              temperature: 0.1,
             },
-            required: ['intent', 'dispute_present', 'confidence', 'rationale', 'evidence'],
-          },
-          temperature: 0.1,
-        },
-      }),
-      timeoutPromise,
-    ]);
+          }),
+          timeoutPromise,
+        ]);
+      },
+      {
+        maxRetries: timeoutMs < 100 ? 0 : undefined,
+      },
+    );
 
     const responseText = response.text;
     if (!responseText || responseText.trim() === '') {
@@ -387,25 +395,35 @@ ${params.emailBody}
   if (openAIKey && openAIKey.trim() !== '' && !openAIKey.includes('sk-mock-key')) {
     const openai = new OpenAI({ apiKey: openAIKey });
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
     try {
-      const completionPromise = openai.chat.completions.parse(
-        {
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: userPrompt },
-          ],
-          response_format: zodResponseFormat(ExtractionSchema, 'intent_extraction'),
-          temperature: 0.1,
+      const completion = await withRetry(
+        async () => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+          try {
+            const res = await openai.chat.completions.parse(
+              {
+                model: 'gpt-4o-mini',
+                messages: [
+                  { role: 'system', content: SYSTEM_PROMPT },
+                  { role: 'user', content: userPrompt },
+                ],
+                response_format: zodResponseFormat(ExtractionSchema, 'intent_extraction'),
+                temperature: 0.1,
+              },
+              { signal: controller.signal },
+            );
+            clearTimeout(timeoutId);
+            return res;
+          } catch (e) {
+            clearTimeout(timeoutId);
+            throw e;
+          }
         },
-        { signal: controller.signal },
+        {
+          maxRetries: timeoutMs < 100 ? 0 : undefined,
+        },
       );
-
-      const completion = await completionPromise;
-      clearTimeout(timeoutId);
 
       const message = completion.choices[0]?.message;
 
@@ -431,7 +449,6 @@ ${params.emailBody}
 
       return validateAndSanitizeExtraction(message.parsed, params.outstandingAmountPaise);
     } catch (err: unknown) {
-      clearTimeout(timeoutId);
       const isAbort =
         (err instanceof Error && err.name === 'AbortError') ||
         String(err).toLowerCase().includes('aborted') ||

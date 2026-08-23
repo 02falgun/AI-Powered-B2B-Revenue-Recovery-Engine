@@ -119,6 +119,14 @@ export default function ARDashboardPage() {
               </span>
             </div>
 
+            {/* Unmatched Queue Navigation Link */}
+            <Link
+              href="/unmatched"
+              className="text-xs font-medium text-[#E5A93C] hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-[#E5A93C40] hover:border-[#E5A93C] bg-[#E5A93C10] flex items-center gap-1.5"
+            >
+              <span>📬</span> Unmatched Queue
+            </Link>
+
             {/* User Session & Role Indicator */}
             <UserNav />
           </div>

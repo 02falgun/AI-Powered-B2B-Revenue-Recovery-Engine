@@ -60,3 +60,20 @@ export interface AuthenticatedUser {
   readonly email: string;
   readonly role: UserRole;
 }
+
+export type EmailJobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'unmatched';
+
+export interface IngestedEmailJob {
+  readonly id: string;
+  readonly messageId: string;
+  readonly sender: string;
+  readonly subject: string;
+  readonly body: string;
+  readonly invoiceId: string | null;
+  readonly status: EmailJobStatus;
+  readonly errorMessage: string | null;
+  readonly attempts: number;
+  readonly processedAt: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}

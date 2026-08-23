@@ -1,4 +1,5 @@
 import Razorpay from 'razorpay';
+import { withRetry } from './retry';
 import type { Result, AppError } from './types';
 
 export interface CreatePaymentLinkParams {
@@ -118,7 +119,9 @@ export async function createTestPaymentLink(
       ...(params.expireByTimestamp ? { expire_by: params.expireByTimestamp } : {}),
     };
 
-    const response = await razorpay.paymentLink.create(payload);
+    const response = await withRetry(async () => {
+      return await razorpay.paymentLink.create(payload);
+    });
 
     if (!response || !response.id || !response.short_url) {
       return {

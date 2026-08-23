@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Result, AppError, Invoice } from './types';
+import type { Result, AppError, Invoice, IngestedEmailJob, EmailJobStatus } from './types';
 
 // Global in-memory idempotency tracking for local/test execution
 const processedPaymentsSet = new Set<string>();
@@ -659,5 +659,251 @@ export async function overrideInvoiceStatus(
   });
 
   return { ok: true, data: updatedInvoice };
+}
+
+// ---------------------------------------------------------------------------
+// Phase P4: Ingested Email Jobs Queue
+// ---------------------------------------------------------------------------
+const inMemoryEmailJobs = new Map<string, IngestedEmailJob>();
+
+function mapRawToEmailJob(raw: any): IngestedEmailJob {
+  return {
+    id: raw.id,
+    messageId: raw.message_id,
+    sender: raw.sender,
+    subject: raw.subject,
+    body: raw.body,
+    invoiceId: raw.invoice_id ?? null,
+    status: raw.status as EmailJobStatus,
+    errorMessage: raw.error_message ?? null,
+    attempts: raw.attempts ?? 0,
+    processedAt: raw.processed_at ?? null,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+  };
+}
+
+export async function enqueueEmailJob(job: {
+  messageId: string;
+  sender: string;
+  subject: string;
+  body: string;
+  invoiceId?: string | null;
+  status?: EmailJobStatus;
+}): Promise<Result<IngestedEmailJob, AppError>> {
+  const now = new Date().toISOString();
+  const newJob: IngestedEmailJob = {
+    id: `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    messageId: job.messageId,
+    sender: job.sender,
+    subject: job.subject,
+    body: job.body,
+    invoiceId: job.invoiceId ?? null,
+    status: job.status ?? (job.invoiceId ? 'pending' : 'unmatched'),
+    errorMessage: null,
+    attempts: 0,
+    processedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  inMemoryEmailJobs.set(newJob.id, newJob);
+
+  const clientResult = getSupabaseAdminClient();
+  if (clientResult.ok) {
+    const supabase = clientResult.data;
+    try {
+      const { data, error } = await supabase
+        .from('ingested_email_jobs')
+        .insert({
+          message_id: newJob.messageId,
+          sender: newJob.sender,
+          subject: newJob.subject,
+          body: newJob.body,
+          invoice_id: newJob.invoiceId,
+          status: newJob.status,
+          created_at: newJob.createdAt,
+          updated_at: newJob.updatedAt,
+        })
+        .select('*')
+        .single();
+
+      if (!error && data) {
+        const persisted = mapRawToEmailJob(data);
+        inMemoryEmailJobs.set(persisted.id, persisted);
+        return { ok: true, data: persisted };
+      }
+    } catch (err) {
+      console.warn('[Enqueue Job Supabase Warning]:', err);
+    }
+  }
+
+  return { ok: true, data: newJob };
+}
+
+export async function getPendingEmailJobs(limit = 10): Promise<Result<IngestedEmailJob[], AppError>> {
+  const clientResult = getSupabaseAdminClient();
+  if (clientResult.ok) {
+    const supabase = clientResult.data;
+    try {
+      const { data, error } = await supabase
+        .from('ingested_email_jobs')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(limit);
+
+      if (!error && data && data.length > 0) {
+        return { ok: true, data: data.map(mapRawToEmailJob) };
+      }
+    } catch (err) {
+      console.warn('[Get Pending Jobs Supabase Warning]:', err);
+    }
+  }
+
+  const memoryPending = Array.from(inMemoryEmailJobs.values())
+    .filter((j) => j.status === 'pending')
+    .slice(0, limit);
+
+  return { ok: true, data: memoryPending };
+}
+
+export async function getUnmatchedEmailJobs(): Promise<Result<IngestedEmailJob[], AppError>> {
+  const clientResult = getSupabaseAdminClient();
+  if (clientResult.ok) {
+    const supabase = clientResult.data;
+    try {
+      const { data, error } = await supabase
+        .from('ingested_email_jobs')
+        .select('*')
+        .eq('status', 'unmatched')
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        return { ok: true, data: data.map(mapRawToEmailJob) };
+      }
+    } catch (err) {
+      console.warn('[Get Unmatched Jobs Supabase Warning]:', err);
+    }
+  }
+
+  const memoryUnmatched = Array.from(inMemoryEmailJobs.values())
+    .filter((j) => j.status === 'unmatched')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return { ok: true, data: memoryUnmatched };
+}
+
+export async function updateEmailJobStatus(
+  jobId: string,
+  status: EmailJobStatus,
+  errorMessage?: string | null,
+): Promise<Result<IngestedEmailJob, AppError>> {
+  const now = new Date().toISOString();
+  let existing = inMemoryEmailJobs.get(jobId);
+  if (existing) {
+    existing = {
+      ...existing,
+      status,
+      errorMessage: errorMessage ?? null,
+      attempts: existing.attempts + 1,
+      processedAt: status === 'completed' || status === 'failed' ? now : existing.processedAt,
+      updatedAt: now,
+    };
+    inMemoryEmailJobs.set(jobId, existing);
+  }
+
+  const clientResult = getSupabaseAdminClient();
+  if (clientResult.ok) {
+    const supabase = clientResult.data;
+    try {
+      const { data, error } = await supabase
+        .from('ingested_email_jobs')
+        .update({
+          status,
+          error_message: errorMessage ?? null,
+          attempts: (existing?.attempts ?? 1),
+          processed_at: status === 'completed' || status === 'failed' ? now : null,
+          updated_at: now,
+        })
+        .eq('id', jobId)
+        .select('*')
+        .single();
+
+      if (!error && data) {
+        const updated = mapRawToEmailJob(data);
+        inMemoryEmailJobs.set(jobId, updated);
+        return { ok: true, data: updated };
+      }
+    } catch (err) {
+      console.warn('[Update Job Status Supabase Warning]:', err);
+    }
+  }
+
+  if (existing) {
+    return { ok: true, data: existing };
+  }
+
+  return {
+    ok: false,
+    error: {
+      code: 'db_error',
+      message: `Email job ${jobId} not found.`,
+    },
+  };
+}
+
+export async function linkUnmatchedEmailToInvoice(
+  jobId: string,
+  invoiceId: string,
+): Promise<Result<IngestedEmailJob, AppError>> {
+  const now = new Date().toISOString();
+  let existing = inMemoryEmailJobs.get(jobId);
+  if (existing) {
+    existing = {
+      ...existing,
+      invoiceId,
+      status: 'pending',
+      updatedAt: now,
+    };
+    inMemoryEmailJobs.set(jobId, existing);
+  }
+
+  const clientResult = getSupabaseAdminClient();
+  if (clientResult.ok) {
+    const supabase = clientResult.data;
+    try {
+      const { data, error } = await supabase
+        .from('ingested_email_jobs')
+        .update({
+          invoice_id: invoiceId,
+          status: 'pending',
+          updated_at: now,
+        })
+        .eq('id', jobId)
+        .select('*')
+        .single();
+
+      if (!error && data) {
+        const updated = mapRawToEmailJob(data);
+        inMemoryEmailJobs.set(jobId, updated);
+        return { ok: true, data: updated };
+      }
+    } catch (err) {
+      console.warn('[Link Job Supabase Warning]:', err);
+    }
+  }
+
+  if (existing) {
+    return { ok: true, data: existing };
+  }
+
+  return {
+    ok: false,
+    error: {
+      code: 'db_error',
+      message: `Email job ${jobId} not found.`,
+    },
+  };
 }
 
