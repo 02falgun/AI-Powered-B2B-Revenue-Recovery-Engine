@@ -1,5 +1,16 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Result, AppError, Invoice, IngestedEmailJob, EmailJobStatus } from './types';
+import type {
+  Result,
+  AppError,
+  Invoice,
+  IngestedEmailJob,
+  EmailJobStatus,
+  Company,
+  PaginationParams,
+  PaginatedResult,
+} from './types';
+
+export const DEFAULT_COMPANY_ID = '00000000-0000-0000-0000-000000000001';
 
 // Global in-memory idempotency tracking for local/test execution
 const processedPaymentsSet = new Set<string>();
@@ -52,6 +63,7 @@ function getSupabaseAdminClient(): Result<SupabaseClient, AppError> {
 function mapRawToInvoice(row: Record<string, unknown>): Invoice {
   return {
     id: String(row.id),
+    companyId: row.company_id ? String(row.company_id) : DEFAULT_COMPANY_ID,
     invoiceNumber: String(row.invoice_number),
     customerName: String(row.customer_name),
     customerEmail: String(row.customer_email),
@@ -66,9 +78,106 @@ function mapRawToInvoice(row: Record<string, unknown>): Invoice {
 }
 
 /**
- * Fetches an invoice by UUID from Supabase.
+ * Global in-memory invoice store for test isolation & offline resilience.
  */
-export async function getInvoiceById(invoiceId: string): Promise<Result<Invoice, AppError>> {
+const inMemoryInvoicesStore = new Map<string, Invoice>([
+  [
+    'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+    {
+      id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      companyId: DEFAULT_COMPANY_ID,
+      invoiceNumber: 'INV-2026-001',
+      customerName: 'Acme Corporation',
+      customerEmail: 'finance@acmecorp.com',
+      totalAmountPaise: 1500000,
+      outstandingAmountPaise: 1500000,
+      currency: 'INR',
+      status: 'overdue',
+      dueDate: '2026-08-01',
+      createdAt: '2026-08-01T00:00:00Z',
+      updatedAt: '2026-08-01T00:00:00Z',
+    },
+  ],
+  [
+    'b78ac20c-69dd-4483-b678-1f03c3d4e580',
+    {
+      id: 'b78ac20c-69dd-4483-b678-1f03c3d4e580',
+      companyId: DEFAULT_COMPANY_ID,
+      invoiceNumber: 'INV-2026-002',
+      customerName: 'TechFlow Solutions',
+      customerEmail: 'billing@techflow.io',
+      totalAmountPaise: 4550050,
+      outstandingAmountPaise: 4550050,
+      currency: 'INR',
+      status: 'overdue',
+      dueDate: '2026-08-05',
+      createdAt: '2026-08-05T00:00:00Z',
+      updatedAt: '2026-08-05T00:00:00Z',
+    },
+  ],
+  [
+    'c89bd30d-70ee-5594-c789-2a04d4e5f691',
+    {
+      id: 'c89bd30d-70ee-5594-c789-2a04d4e5f691',
+      companyId: DEFAULT_COMPANY_ID,
+      invoiceNumber: 'INV-2026-003',
+      customerName: 'Global Logistics Ltd',
+      customerEmail: 'ap@globallogistics.com',
+      totalAmountPaise: 12000000,
+      outstandingAmountPaise: 6000000,
+      currency: 'INR',
+      status: 'overdue',
+      dueDate: '2026-07-20',
+      createdAt: '2026-07-20T00:00:00Z',
+      updatedAt: '2026-07-20T00:00:00Z',
+    },
+  ],
+]);
+
+/**
+ * Creates an invoice in-memory/DB (useful for cross-tenant tests).
+ */
+export async function createInvoice(invoice: Invoice): Promise<Result<Invoice, AppError>> {
+  inMemoryInvoicesStore.set(invoice.id, invoice);
+  const clientResult = getSupabaseAdminClient();
+  if (clientResult.ok) {
+    const supabase = clientResult.data;
+    try {
+      const { data, error } = await supabase
+        .from('invoices')
+        .insert({
+          id: invoice.id,
+          company_id: invoice.companyId || DEFAULT_COMPANY_ID,
+          invoice_number: invoice.invoiceNumber,
+          customer_name: invoice.customerName,
+          customer_email: invoice.customerEmail,
+          total_amount_paise: invoice.totalAmountPaise,
+          outstanding_amount_paise: invoice.outstandingAmountPaise,
+          currency: invoice.currency,
+          status: invoice.status,
+          due_date: invoice.dueDate,
+          created_at: invoice.createdAt,
+          updated_at: invoice.updatedAt,
+        })
+        .select('*')
+        .single();
+      if (!error && data) {
+        return { ok: true, data: mapRawToInvoice(data) };
+      }
+    } catch (err) {
+      console.warn('[Create Invoice Supabase Warning]:', err);
+    }
+  }
+  return { ok: true, data: invoice };
+}
+
+/**
+ * Fetches an invoice by UUID or Invoice Number from Supabase with company tenant isolation.
+ */
+export async function getInvoiceById(
+  invoiceId: string,
+  requiredCompanyId?: string,
+): Promise<Result<Invoice, AppError>> {
   if (!invoiceId || invoiceId.trim() === '') {
     return {
       ok: false,
@@ -79,136 +188,156 @@ export async function getInvoiceById(invoiceId: string): Promise<Result<Invoice,
     };
   }
 
+  let invoice: Invoice | null = null;
   const clientResult = getSupabaseAdminClient();
-  if (!clientResult.ok) {
-    // Return mock fallback invoice for dev testing when DB unconfigured
-    const MOCK_INVOICES = [
-      {
-        id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
-        invoiceNumber: 'INV-2026-001',
-        customerName: 'Acme Corporation',
-        customerEmail: 'finance@acmecorp.com',
-        totalAmountPaise: 1500000,
-        outstandingAmountPaise: 1500000,
-        currency: 'INR' as const,
-        status: 'overdue' as const,
-        dueDate: '2026-08-01',
-        createdAt: '2026-08-01T00:00:00Z',
-        updatedAt: '2026-08-01T00:00:00Z',
-      },
-      {
-        id: 'b78ac20c-69dd-4483-b678-1f03c3d4e580',
-        invoiceNumber: 'INV-2026-002',
-        customerName: 'TechFlow Solutions',
-        customerEmail: 'billing@techflow.io',
-        totalAmountPaise: 4550050,
-        outstandingAmountPaise: 4550050,
-        currency: 'INR' as const,
-        status: 'overdue' as const,
-        dueDate: '2026-08-05',
-        createdAt: '2026-08-05T00:00:00Z',
-        updatedAt: '2026-08-05T00:00:00Z',
-      },
-    ];
 
-    const matchedMock = MOCK_INVOICES.find(
-      (inv) => inv.id === invoiceId || inv.invoiceNumber === invoiceId,
-    ) ?? {
-      id: invoiceId,
-      invoiceNumber: 'INV-2026-001',
-      customerName: 'Acme Corporation',
-      customerEmail: 'finance@acmecorp.com',
-      totalAmountPaise: 1500000,
-      outstandingAmountPaise: 1500000,
-      currency: 'INR' as const,
-      status: 'overdue' as const,
-      dueDate: '2026-08-01',
-      createdAt: '2026-08-01T00:00:00Z',
-      updatedAt: '2026-08-01T00:00:00Z',
-    };
+  if (clientResult.ok) {
+    const supabase = clientResult.data;
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invoiceId);
+      const query = isUuid
+        ? supabase.from('invoices').select('*').eq('id', invoiceId)
+        : supabase.from('invoices').select('*').eq('invoice_number', invoiceId);
 
-    return { ok: true, data: matchedMock };
-  }
-
-  const supabase = clientResult.data;
-
-  try {
-    const { data, error } = await supabase
-      .from('invoices')
-      .select('*')
-      .eq('id', invoiceId)
-      .single();
-
-    if (error || !data) {
-      // Fallback to mock invoice if table empty
-      const matchedMock = {
-        id: invoiceId,
-        invoiceNumber: 'INV-2026-001',
-        customerName: 'Acme Corporation',
-        customerEmail: 'finance@acmecorp.com',
-        totalAmountPaise: 1500000,
-        outstandingAmountPaise: 1500000,
-        currency: 'INR' as const,
-        status: 'overdue' as const,
-        dueDate: '2026-08-01',
-        createdAt: '2026-08-01T00:00:00Z',
-        updatedAt: '2026-08-01T00:00:00Z',
-      };
-      return { ok: true, data: matchedMock };
+      const { data, error } = await query.single();
+      if (!error && data) {
+        invoice = mapRawToInvoice(data);
+      }
+    } catch {
+      // Continue to in-memory fallback
     }
-
-    return { ok: true, data: mapRawToInvoice(data) };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown database error';
-    return {
-      ok: false,
-      error: {
-        code: 'db_error',
-        message: `Failed to fetch invoice: ${message}`,
-      },
-    };
-  }
-}
-
-/**
- * Fetches all invoices from Supabase.
- */
-export async function getAllInvoices(): Promise<Result<ReadonlyArray<Invoice>, AppError>> {
-  const clientResult = getSupabaseAdminClient();
-  if (!clientResult.ok) {
-    return clientResult;
   }
 
-  const supabase = clientResult.data;
+  if (!invoice) {
+    const foundInMemory =
+      inMemoryInvoicesStore.get(invoiceId) ||
+      Array.from(inMemoryInvoicesStore.values()).find((i) => i.invoiceNumber === invoiceId);
 
-  try {
-    const { data, error } = await supabase
-      .from('invoices')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
+    if (foundInMemory) {
+      invoice = foundInMemory;
+    } else {
       return {
         ok: false,
         error: {
           code: 'db_error',
-          message: `Failed to fetch invoices list: ${error.message}`,
+          message: `Invoice ${invoiceId} not found.`,
         },
       };
     }
-
-    const invoices = (data ?? []).map(mapRawToInvoice);
-    return { ok: true, data: invoices };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown database error';
-    return {
-      ok: false,
-      error: {
-        code: 'db_error',
-        message: `Failed to query invoices: ${message}`,
-      },
-    };
   }
+
+  // Cross-tenant verification: Verify invoice belongs to requiredCompanyId
+  if (requiredCompanyId) {
+    const invoiceCompany = invoice.companyId || DEFAULT_COMPANY_ID;
+    if (invoiceCompany !== requiredCompanyId) {
+      return {
+        ok: false,
+        error: {
+          code: 'unauthorized_error',
+          message: `Access denied: Invoice ${invoiceId} does not belong to your company.`,
+          details: { invoiceCompany, requiredCompanyId },
+        },
+      };
+    }
+  }
+
+  return { ok: true, data: invoice };
+}
+
+/**
+ * Fetches all invoices, optionally scoped by companyId.
+ */
+export async function getAllInvoices(companyId?: string): Promise<Result<ReadonlyArray<Invoice>, AppError>> {
+  const clientResult = getSupabaseAdminClient();
+  if (clientResult.ok) {
+    const supabase = clientResult.data;
+    try {
+      let query = supabase.from('invoices').select('*');
+      if (companyId) {
+        query = query.eq('company_id', companyId);
+      }
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (!error && data) {
+        return { ok: true, data: data.map(mapRawToInvoice) };
+      }
+    } catch (err: unknown) {
+      console.warn('[Get All Invoices Supabase Warning]:', err);
+    }
+  }
+
+  let invoices = Array.from(inMemoryInvoicesStore.values());
+  if (companyId) {
+    invoices = invoices.filter((i) => (i.companyId || DEFAULT_COMPANY_ID) === companyId);
+  }
+
+  return { ok: true, data: invoices };
+}
+
+/**
+ * Fetches paginated invoices with total count and metadata.
+ */
+export async function getPaginatedInvoices(
+  params: PaginationParams = {},
+): Promise<Result<PaginatedResult<Invoice>, AppError>> {
+  const page = Math.max(1, params.page || 1);
+  const limit = Math.max(1, Math.min(100, params.limit || 10));
+  const offset = (page - 1) * limit;
+
+  const clientResult = getSupabaseAdminClient();
+  if (clientResult.ok) {
+    const supabase = clientResult.data;
+    try {
+      let query = supabase.from('invoices').select('*', { count: 'exact' });
+      if (params.companyId) {
+        query = query.eq('company_id', params.companyId);
+      }
+      if (params.status) {
+        query = query.eq('status', params.status);
+      }
+
+      const { data, count, error } = await query
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (!error && data) {
+        const total = count ?? data.length;
+        return {
+          ok: true,
+          data: {
+            items: data.map(mapRawToInvoice),
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit) || 1,
+          },
+        };
+      }
+    } catch (err) {
+      console.warn('[Get Paginated Invoices Supabase Warning]:', err);
+    }
+  }
+
+  let items = Array.from(inMemoryInvoicesStore.values());
+  if (params.companyId) {
+    items = items.filter((inv) => (inv.companyId || DEFAULT_COMPANY_ID) === params.companyId);
+  }
+  if (params.status) {
+    items = items.filter((inv) => inv.status === params.status);
+  }
+
+  const total = items.length;
+  const paginated = items.slice(offset, offset + limit);
+
+  return {
+    ok: true,
+    data: {
+      items: paginated,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    },
+  };
 }
 
 export interface InsertAuditLogParams {
@@ -470,14 +599,92 @@ export async function getAuditLogsForInvoice(
 }
 
 // In-memory profile store for test runs and schema-cache fallback
-const inMemoryProfiles = new Map<string, { id: string; role: 'admin' | 'operator'; email?: string; createdAt: string }>();
+const inMemoryProfiles = new Map<
+  string,
+  { id: string; role: 'admin' | 'operator'; email?: string; companyId?: string; createdAt: string }
+>();
+
+// In-memory company store
+const inMemoryCompanies = new Map<string, Company>([
+  [
+    DEFAULT_COMPANY_ID,
+    {
+      id: DEFAULT_COMPANY_ID,
+      name: 'Acme Global Services',
+      createdAt: new Date().toISOString(),
+    },
+  ],
+]);
 
 /**
- * Resolves user profile and role by user ID.
+ * Resolves all registered companies.
+ */
+export async function getAllCompanies(): Promise<Result<ReadonlyArray<Company>, AppError>> {
+  const clientResult = getSupabaseAdminClient();
+  if (clientResult.ok) {
+    const supabase = clientResult.data;
+    try {
+      const { data, error } = await supabase.from('companies').select('*').order('created_at', { ascending: true });
+      if (!error && data && data.length > 0) {
+        return {
+          ok: true,
+          data: data.map((c) => ({
+            id: String(c.id),
+            name: String(c.name),
+            createdAt: String(c.created_at),
+          })),
+        };
+      }
+    } catch {
+      // Continue to in-memory fallback
+    }
+  }
+
+  return { ok: true, data: Array.from(inMemoryCompanies.values()) };
+}
+
+/**
+ * Creates or registers a new company.
+ */
+export async function createCompany(company: Company): Promise<Result<Company, AppError>> {
+  inMemoryCompanies.set(company.id, company);
+  const clientResult = getSupabaseAdminClient();
+  if (clientResult.ok) {
+    const supabase = clientResult.data;
+    try {
+      const { data, error } = await supabase
+        .from('companies')
+        .insert({
+          id: company.id,
+          name: company.name,
+          created_at: company.createdAt,
+        })
+        .select('*')
+        .single();
+
+      if (!error && data) {
+        return {
+          ok: true,
+          data: {
+            id: String(data.id),
+            name: String(data.name),
+            createdAt: String(data.created_at),
+          },
+        };
+      }
+    } catch (err) {
+      console.warn('[Create Company Supabase Warning]:', err);
+    }
+  }
+  return { ok: true, data: company };
+}
+
+/**
+ * Resolves user profile and role by user ID with company tenant mapping.
  */
 export async function getUserProfileById(
   userId: string,
-): Promise<Result<{ id: string; role: 'admin' | 'operator'; email?: string; createdAt: string }, AppError>> {
+): Promise<Result<{ id: string; role: 'admin' | 'operator'; email?: string; companyId: string; createdAt: string }, AppError>> {
   if (!userId) {
     return {
       ok: false,
@@ -487,7 +694,13 @@ export async function getUserProfileById(
 
   const cached = inMemoryProfiles.get(userId);
   if (cached) {
-    return { ok: true, data: cached };
+    return {
+      ok: true,
+      data: {
+        ...cached,
+        companyId: cached.companyId || DEFAULT_COMPANY_ID,
+      },
+    };
   }
 
   const clientResult = getSupabaseAdminClient();
@@ -495,6 +708,7 @@ export async function getUserProfileById(
     const fallbackProfile = {
       id: userId,
       role: 'operator' as const,
+      companyId: DEFAULT_COMPANY_ID,
       createdAt: new Date().toISOString(),
     };
     inMemoryProfiles.set(userId, fallbackProfile);
@@ -511,10 +725,10 @@ export async function getUserProfileById(
       .single();
 
     if (error || !data) {
-      // If table not found in cache or record missing, return default operator profile
       const defaultProfile = {
         id: userId,
         role: 'operator' as const,
+        companyId: DEFAULT_COMPANY_ID,
         createdAt: new Date().toISOString(),
       };
       inMemoryProfiles.set(userId, defaultProfile);
@@ -524,6 +738,7 @@ export async function getUserProfileById(
     const profile = {
       id: String(data.id),
       role: (data.role === 'admin' ? 'admin' : 'operator') as 'admin' | 'operator',
+      companyId: data.company_id ? String(data.company_id) : DEFAULT_COMPANY_ID,
       createdAt: String(data.created_at),
     };
     inMemoryProfiles.set(userId, profile);
@@ -532,6 +747,7 @@ export async function getUserProfileById(
     const fallbackProfile = {
       id: userId,
       role: 'operator' as const,
+      companyId: DEFAULT_COMPANY_ID,
       createdAt: new Date().toISOString(),
     };
     return { ok: true, data: fallbackProfile };
@@ -539,17 +755,20 @@ export async function getUserProfileById(
 }
 
 /**
- * Upserts a user profile with role ('admin' | 'operator').
+ * Upserts a user profile with role and company ID.
  */
 export async function upsertUserProfile(params: {
   userId: string;
   role: 'admin' | 'operator';
   email?: string;
-}): Promise<Result<{ id: string; role: 'admin' | 'operator'; email?: string; createdAt: string }, AppError>> {
+  companyId?: string;
+}): Promise<Result<{ id: string; role: 'admin' | 'operator'; email?: string; companyId: string; createdAt: string }, AppError>> {
+  const companyId = params.companyId || DEFAULT_COMPANY_ID;
   const profile = {
     id: params.userId,
     role: params.role,
     email: params.email,
+    companyId,
     createdAt: new Date().toISOString(),
   };
 
@@ -569,6 +788,7 @@ export async function upsertUserProfile(params: {
         {
           id: params.userId,
           role: params.role,
+          company_id: companyId,
           created_at: profile.createdAt,
         },
         { onConflict: 'id' },
@@ -585,6 +805,7 @@ export async function upsertUserProfile(params: {
       data: {
         id: String(data.id),
         role: (data.role === 'admin' ? 'admin' : 'operator') as 'admin' | 'operator',
+        companyId: data.company_id ? String(data.company_id) : companyId,
         createdAt: String(data.created_at),
       },
     };
@@ -599,6 +820,7 @@ export interface OverrideInvoiceParams {
   readonly adminActor: string;
   readonly reason: string;
   readonly approvedPaise?: number;
+  readonly requiredCompanyId?: string;
 }
 
 /**
@@ -608,7 +830,7 @@ export interface OverrideInvoiceParams {
 export async function overrideInvoiceStatus(
   params: OverrideInvoiceParams,
 ): Promise<Result<Invoice, AppError>> {
-  const invoiceResult = await getInvoiceById(params.invoiceId);
+  const invoiceResult = await getInvoiceById(params.invoiceId, params.requiredCompanyId);
   if (!invoiceResult.ok) {
     return invoiceResult;
   }
@@ -622,6 +844,8 @@ export async function overrideInvoiceStatus(
     status: params.newStatus,
     updatedAt: new Date().toISOString(),
   };
+
+  inMemoryInvoicesStore.set(params.invoiceId, updatedInvoice);
 
   if (clientResult.ok) {
     const supabase = clientResult.data;

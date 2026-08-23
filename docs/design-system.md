@@ -1,167 +1,82 @@
-# RecoverAI Design System
+# RecoverAI Design System — Physical Control Panel (B&W Edition)
 
-> Written before any component code — per the engineering constitution's "plan first" requirement.
+## 1. Overview & Aesthetic Philosophy
+RecoverAI is the **Accounts Receivable Control Center**. This design system removes all generic "AI-dashboard" tropes (navy glow, neon blue/green badges, ambient looping pulses, uppercase mono stat sub-labels) and replaces them with a **tactile, physical control-panel interface** in strict grayscale.
+
+Reference inspirations:
+- Dieter Rams / Braun precision audio and calculation hardware.
+- Aircraft cockpit breaker and annunciator toggle banks.
+- Mechanical banking ledger consoles and milled aluminum chassis.
 
 ---
 
-## Color Tokens
+## 2. Grayscale Color Palette (Zero-Hue Axis)
 
-All tokens go into `globals.css` via Tailwind v4's `@theme {}` block.
-
-| Token | Hex | Role |
+| Token | Hex Value | Role / Usage |
 |---|---|---|
-| `--color-rzp-ink` | `#012652` | Deepest navy — backgrounds, logo fill, shadows |
-| `--color-rzp-ocean` | `#0D5FBF` | Mid blue — interactive surfaces, borders on focus |
-| `--color-rzp-electric` | `#3395FF` | Primary CTA color, links, primary badge fills |
-| `--color-rzp-sky` | `#7EC8E3` | Informational blue, light accent on dark surfaces |
-| `--color-rzp-chrome` | `#E8F0FE` | Near-white blue — used for glassmorphism tints |
-| `--color-recover-bg` | `#060E1F` | Ultra-dark navy — richer than plain slate-950 |
-| `--color-recover-surface` | `#0C1A35` | Card surfaces — deep but readable |
-| `--color-recover-border` | `#1A2F55` | Subtle borders that don't scream |
-| `--color-recover-mint` | `#00C48C` | Safe recovery / success state |
-| `--color-recover-amber` | `#F5A623` | Human review / caution state |
-| `--color-recover-red` | `#F04E37` | Hard error states |
+| `--panel-chassis` | `#0D0D0E` | Main chassis / app background canvas |
+| `--panel-surface` | `#161618` | Base control panel surface |
+| `--panel-raised` | `#202024` | Raised physical component / card surface |
+| `--panel-recessed` | `#080809` | Debossed / carved instrument readout cavity |
+| `--border-bezel` | `#2E2E33` | Physical beveled seam / component boundary |
+| `--border-highlight` | `#484850` | Top-edge reflection / milled metal bevel |
+| `--text-primary` | `#F4F4F5` | Paper-white primary display readout |
+| `--text-secondary` | `#A1A1AA` | Etched aluminum secondary label |
+| `--text-tertiary` | `#71717A` | Engraved chassis label / specification |
+| `--switch-active` | `#FAFAFA` | Engaged switch contact plate |
+| `--switch-inactive` | `#27272A` | Disengaged switch rocker body |
 
-**Source:** Razorpay Blade design system (Prussian Blue `#012652`, Dodger Blue `#0D94FB` adjusted to `#3395FF` per verified brand palette from schemecolor.com and brandpalettes.com). The `recover-*` tokens are original to RecoverAI.
-
-### Anti-pattern check
-- ❌ Cream + serif + terracotta? No. Deep navy base.
-- ❌ Dark + one neon? No. Multi-tier, 11 named tokens, disciplined use.
-- ❌ Numbered decorative badges? None used decoratively.
-- ❌ Generic fintech template? The circuit-board guardrail signature element is unique to this product.
+*Strict Rule*: Zero blue/navy tint, zero neon green, zero saturated amber. Complete readability is maintained even when viewed on a monochrome display.
 
 ---
 
-## Typography
+## 3. Status Without Color (Shape, Weight & Iconography)
 
-| Usage | Font | Weight | Size |
+Status is never conveyed by color alone:
+
+| State | Visual Treatment | Icon | Shape |
 |---|---|---|---|
-| Display / h1 | Space Grotesk | 700 | 36–48px |
-| Headings / h2–h3 | Space Grotesk | 600 | 20–28px |
-| UI labels | Space Grotesk | 500 | 12–14px |
-| Body / paragraphs | Geist Sans | 400 | 14–16px |
-| Amounts / IDs | Geist Mono | 700 | varies |
-| Captions / meta | Geist Sans | 400 | 11–12px |
-
-**Rationale:** Space Grotesk has geometric confidence that reads as "fintech product" without being aggressive. It's used by several funded fintechs precisely because of this. Geist pairs cleanly as body copy. This is NOT the default Inter-everywhere look.
+| **AUTO_RECOVER** (Approved) | Solid filled white plate with black ink text | `✓` (Bold Checkmark) | Solid pill / filled block |
+| **HUMAN_REVIEW** (Review Required) | Thick double-outline with dark interior | `▲` (Alert Triangle) | Heavy notched rectangle |
+| **OVERDUE** | Solid bordered badge with diagonal hatching | `⏱` (Timer Dial) | Beveled rectangular tag |
+| **PAID / SETTLED** | Recessed engraved plate with lock check | `●` (Solid Disc) | Debossed square badge |
+| **PENDING / PROCESSING** | Dashed hairline outline | `◌` (Dashed Ring) | Dashed rounded pill |
 
 ---
 
-## Depth System
+## 4. Real 3D Physical Elevation & Shadow Metaphor
 
-Three elevation tiers implemented as CSS variables + utilities:
+Single top-left directional light source:
 
-### Tier 1 — Surface (default card state)
-```css
-box-shadow:
-  0 1px 3px rgba(1, 38, 82, 0.5),
-  0 4px 16px rgba(1, 38, 82, 0.25);
-```
-
-### Tier 2 — Raised (hover, active, focused card)
-```css
-box-shadow:
-  0 4px 12px rgba(1, 38, 82, 0.6),
-  0 16px 40px rgba(1, 38, 82, 0.35),
-  inset 0 1px 0 rgba(255, 255, 255, 0.06);
-```
-
-### Tier 3 — Floating (key panels, payment link card)
-```css
-box-shadow:
-  0 8px 32px rgba(13, 95, 191, 0.4),
-  0 32px 64px rgba(1, 38, 82, 0.55),
-  inset 0 1px 0 rgba(255, 255, 255, 0.08);
-```
-
-### Interactive bevel
-Buttons get `inset 0 1px 0 rgba(255, 255, 255, 0.1)` — simulates a top-edge physical light catch.
-
-### Gradient meshes
-Behind hero amounts and the decision result panel:
-```css
-background: radial-gradient(ellipse at 50% 0%, rgba(51, 149, 255, 0.12) 0%, transparent 70%);
-```
+- **Raised Panel (Outset 3D)**:
+  `box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 4px 12px rgba(0, 0, 0, 0.6), 0 1px 2px rgba(0, 0, 0, 0.8);`
+- **Recessed Readout (Debossed 3D)**:
+  `box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.9), inset 0 0 1px rgba(255, 255, 255, 0.05), 0 1px 0 rgba(255, 255, 255, 0.05);`
+- **Mechanical Tactile Button**:
+  - Rest: `box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset, 0 3px 0 #000000, 0 5px 8px rgba(0, 0, 0, 0.7);`
+  - Pressed: `transform: translateY(2px); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 1px 0 #000000, 0 2px 4px rgba(0, 0, 0, 0.8);`
 
 ---
 
-## Motion System
+## 5. Signature Element: Guardrail Rocker-Switch Bank
 
-Five specific, purposeful animations. Not ambient decoration.
+An 8-unit physical toggle bank (switches **A** through **H**) simulating milled toggle switches on an instrument panel:
 
-### 1. Page-load stagger (Dashboard invoice cards)
-- `opacity: 0, y: 20 → opacity: 1, y: 0`
-- Framer Motion `staggerChildren: 0.06s` on container
-- Duration: `0.4s`, easing: `easeOut`
-- Respects `prefers-reduced-motion`: no transform, instant opacity
+1. **A — Amount Specification**: Explicit payable amount parsed.
+2. **B — Dispute Filter**: Zero active dispute/counter-claim.
+3. **C — 50% Threshold**: >= 50% of invoice total promised.
+4. **D — Outstanding Cap**: Amount <= authoritative DB balance.
+5. **E — 30-Day Window**: Promised payment within 30 days of due date.
+6. **F — AI Confidence**: Extraction confidence score >= 0.70.
+7. **G — Adversarial Guard**: Clean prompt injection / safety check.
+8. **H — Entity Match**: Verified invoice number and customer identity match.
 
-### 2. Decision badge spring
-- Trigger: when `result` arrives with `AUTO_RECOVER` or `HUMAN_REVIEW`
-- `scale: 0.8, opacity: 0 → scale: 1, opacity: 1`
-- `type: "spring", stiffness: 400, damping: 20`
-- The badge only appears after all guardrail LEDs have lit up
-
-### 3. AI processing multi-stage indicator
-- Shows 3 stages while API call is in flight:
-  - "Parsing buyer email..." (0–2s)
-  - "Running AI intent extraction..." (2s+)
-  - "Evaluating 6 policy guardrails..." (3s+)
-- Animated progress bar under the stages
-- Respects reduced motion: shows static label only
-
-### 4. Guardrail circuit-board sequence (SIGNATURE ELEMENT)
-- Each of the 6 guardrail rows has an LED circle on the left
-- LEDs animate in sequence: `120ms` stagger delay per LED
-- Passed LED: `rzp-electric` blue, with a subtle `scale: 1.2 → 1` pulse ring
-- Triggered LED: `recover-amber`, with a brief flicker (`opacity: 1 → 0.6 → 1`)
-- Decision badge resolves AFTER the last LED completes (creates narrative payoff)
-
-### 5. Payment link reveal
-- Card slides in: `y: 16, opacity: 0 → y: 0, opacity: 1` with spring
-- Amount figure pulses: brief `textShadow` glow expands then settles
-- The "Open Payment Link" button shimmers once on entry
+**Switch Visual States**:
+- **Engaged / Passed**: Switch rocker flipped up, bright top edge, engraved `[● ON]` marker.
+- **Tripped / Flagged**: Switch rocker angled down with red-line texture, engraved `[▲ TRIP]` warning plate.
 
 ---
 
-## Signature Element Detail
-
-### Guardrail Breakdown as a Circuit Board
-
-The `PolicyGuardrailBreakdown` component is the most important screen moment. Execution:
-
-1. Container has a subtle circuit-trace SVG background (CSS, inline SVG mask)
-2. Each guardrail renders as a horizontal "trace row" — a card with a left-side LED indicator circle
-3. LED states:
-   - **Pending** (before animation): `#1A2F55` — dormant dark
-   - **Passed**: `#3395FF` with glow ring — powered up
-   - **Triggered**: `#F5A623` with amber glow — alert state
-4. Animation sequence driven by Framer Motion `staggerChildren` on the list
-5. Decision badge (`AUTO_RECOVER` / `HUMAN_REVIEW`) is a separate animated element that resolves last
-
-This creates the feeling of watching a real policy engine evaluate in real time — not reading a static result.
-
----
-
-## Button System
-
-| Variant | Background | Text | Hover | Shadow |
-|---|---|---|---|---|
-| `primary` | `rzp-electric` | white | `rzp-ocean` + lift | Floating tier |
-| `secondary` | transparent | `rzp-electric` | `rzp-electric/10` bg | Surface tier |
-| `caution` | `recover-amber/15` | `recover-amber` | `recover-amber/25` bg | Surface tier |
-
-All buttons:
-- `focus-visible:outline-2 focus-visible:outline-rzp-electric focus-visible:outline-offset-2` — keyboard nav mandatory
-- Hover: `translateY(-1px)` + shadow upgrade (disabled via `prefers-reduced-motion`)
-- Active: `translateY(0)` + shadow downgrade
-
----
-
-## Reduced Motion
-
-All animations have fallbacks. When `prefers-reduced-motion: reduce`:
-- Stagger: no transform, only opacity transitions (0.1s duration)
-- Spring badge: instant appear (no scale animation)
-- Guardrail LEDs: all lit simultaneously, no stagger
-- Processing indicator: static label, no animated bar
-- Button hover: no translateY, only color change
+## 6. Typography Scale & Application Rules
+- **UI Chrome & Headings**: Crisp Grotesk Sans (`font-sans` / `font-bold`), uppercase engraved section titles with wide tracking (`tracking-wider`).
+- **Data Values Only**: Monospace (`font-mono`) reserved strictly for numeric quantities (e.g. `₹15,000.00`), UUIDs, and timestamps. Monospace is forbidden on labels or status descriptions.

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getInvoiceById, getAuditLogsForInvoice } from '@/lib/db';
+import { getCurrentUser } from '@/lib/auth';
 
 const MOCK_FALLBACK_INVOICES = [
   {
@@ -49,25 +50,37 @@ export async function GET(
 ): Promise<NextResponse> {
   const { id } = await props.params;
 
-  const invoiceResult = await getInvoiceById(id);
+  // Resolve user session for tenant verification if available
+  const userResult = await getCurrentUser();
+  const requiredCompanyId = userResult.ok ? userResult.data.companyId : undefined;
+
+  const invoiceResult = await getInvoiceById(id, requiredCompanyId);
 
   if (!invoiceResult.ok) {
+    if (invoiceResult.error.code === 'unauthorized_error') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: invoiceResult.error,
+        },
+        { status: 403 },
+      );
+    }
+
     // Look up in fallback mock invoices array by ID
     const matchedMock = MOCK_FALLBACK_INVOICES.find(
       (inv) => inv.id === id || inv.invoiceNumber === id,
-    ) ?? {
-      id,
-      invoiceNumber: 'INV-2026-001',
-      customerName: 'Acme Corporation',
-      customerEmail: 'finance@acmecorp.com',
-      totalAmountPaise: 1500000,
-      outstandingAmountPaise: 1500000,
-      currency: 'INR' as const,
-      status: 'overdue' as const,
-      dueDate: '2026-08-01',
-      createdAt: '2026-08-01T00:00:00Z',
-      updatedAt: '2026-08-01T00:00:00Z',
-    };
+    );
+
+    if (!matchedMock) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: { code: 'db_error', message: `Invoice ${id} not found.` },
+        },
+        { status: 404 },
+      );
+    }
 
     return NextResponse.json({
       success: true,

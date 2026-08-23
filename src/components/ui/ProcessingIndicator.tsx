@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 
 const STAGES = [
-  { label: 'Parsing buyer email...', detail: 'Tokenising and cleaning input text' },
-  { label: 'Running AI intent extraction...', detail: 'Gemini Flash analysing payment intent' },
-  { label: 'Evaluating 6 policy guardrails...', detail: 'Deterministic invariant safety checks' },
+  { label: 'Ingesting buyer payload...', detail: 'Tokenising and cleaning input text' },
+  { label: 'Running AI intent extraction...', detail: 'Gemini Flash analyzing settlement intent' },
+  { label: 'Evaluating 8 policy guardrail interlocks...', detail: 'Deterministic safety boundary checks' },
 ] as const;
 
 interface ProcessingIndicatorProps {
@@ -13,9 +13,8 @@ interface ProcessingIndicatorProps {
 }
 
 /**
- * Multi-stage processing indicator for the email analysis pipeline.
- * Shows three labelled stages advancing over time while the API call
- * is in flight. Respects prefers-reduced-motion.
+ * Multi-stage processing indicator for the pipeline.
+ * Formatted like an industrial telemetry sequence readout in strict grayscale.
  */
 export function ProcessingIndicator({ isProcessing }: ProcessingIndicatorProps) {
   const [stage, setStage] = useState<number>(0);
@@ -28,16 +27,14 @@ export function ProcessingIndicator({ isProcessing }: ProcessingIndicatorProps) 
       return;
     }
 
-    // Advance stages with realistic timing
     const stageTimers = [
       setTimeout(() => setStage(1), 1800),
       setTimeout(() => setStage(2), 3500),
     ];
 
-    // Animated progress bar
     let pct = 0;
     const progressInterval = setInterval(() => {
-      pct = Math.min(pct + 0.8, 88); // Never hits 100 — resolves when API returns
+      pct = Math.min(pct + 1.2, 88);
       setProgress(pct);
     }, 80);
 
@@ -56,64 +53,59 @@ export function ProcessingIndicator({ isProcessing }: ProcessingIndicatorProps) 
       role="status"
       aria-live="polite"
       aria-label={`Processing: ${current.label}`}
-      className="rounded-xl border border-[#1A2F55] bg-[#0C1A35] p-4 space-y-3"
+      className="panel-raised p-5 rounded-xl space-y-4"
     >
-      {/* Stage label */}
-      <div className="flex items-center gap-3">
-        {/* Animated dot */}
-        <span className="relative flex h-3 w-3 flex-shrink-0">
-          <span
-            className="absolute inline-flex h-full w-full rounded-full bg-[#3395FF] opacity-75"
-            style={{ animation: 'pulse-ring 1.2s cubic-bezier(0,0,0.2,1) infinite' }}
-          />
-          <span className="relative inline-flex h-3 w-3 rounded-full bg-[#3395FF]" />
-        </span>
-
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-white font-display">{current.label}</p>
-          <p className="text-[11px] text-[#7EC8E3] mt-0.5 font-mono">{current.detail}</p>
+      {/* Header telemetry readout */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-2 h-2 rounded-full bg-[#FAFAFA] animate-pulse" />
+          <span className="text-xs font-bold uppercase tracking-wider text-[#FAFAFA]">
+            {current.label}
+          </span>
         </div>
+        <span className="text-xs font-mono font-bold text-[#A1A1AA]">
+          {Math.round(progress)}%
+        </span>
       </div>
 
-      {/* Stage pills */}
-      <div className="flex gap-2">
-        {STAGES.map((s, i) => (
-          <div
-            key={s.label}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono transition-all duration-300 ${
-              i < stage
-                ? 'bg-[#00C48C20] text-[#00C48C] border border-[#00C48C40]'
-                : i === stage
-                  ? 'bg-[#3395FF20] text-[#3395FF] border border-[#3395FF40]'
-                  : 'bg-[#0F1F3D] text-[#1A2F55] border border-[#1A2F55]'
-            }`}
-          >
-            {i < stage ? (
-              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true">
-                <path d="M1.5 4l1.8 1.8L6.5 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            ) : i === stage ? (
-              <span
-                className="h-1.5 w-1.5 rounded-full bg-current"
-                style={{ animation: 'pulse-ring 1s ease-in-out infinite' }}
-              />
-            ) : (
-              <span className="h-1.5 w-1.5 rounded-full bg-current opacity-30" />
-            )}
-            <span className="truncate max-w-[80px]">{i === 0 ? 'Parse' : i === 1 ? 'Extract' : 'Evaluate'}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Progress bar — hidden for reduced-motion users */}
-      <div
-        className="h-0.5 w-full rounded-full bg-[#1A2F55] overflow-hidden motion-reduce:hidden"
-        aria-hidden="true"
-      >
+      {/* Recessed Progress Bar */}
+      <div className="w-full h-2 rounded panel-recessed overflow-hidden p-0.5">
         <div
-          className="h-full rounded-full bg-[#3395FF] transition-all duration-200 ease-linear"
+          className="h-full rounded-sm bg-[#FAFAFA] transition-all duration-100 ease-out"
           style={{ width: `${progress}%` }}
         />
+      </div>
+
+      {/* Sequential stage indicators */}
+      <div className="grid grid-cols-3 gap-2 pt-1 border-t border-[#26262B]">
+        {STAGES.map((s, idx) => {
+          const isDone = idx < stage;
+          const isCurrent = idx === stage;
+          return (
+            <div key={s.label} className="space-y-1">
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-sm border ${
+                    isDone
+                      ? 'bg-[#FAFAFA] text-[#0D0D0E] border-[#FFFFFF]'
+                      : isCurrent
+                        ? 'bg-[#202024] text-[#FAFAFA] border-[#52525B]'
+                        : 'bg-[#121214] text-[#52525B] border-[#1E1E22]'
+                  }`}
+                >
+                  {isDone ? '✓' : `0${idx + 1}`}
+                </span>
+                <span
+                  className={`text-[11px] font-bold tracking-tight truncate ${
+                    isDone || isCurrent ? 'text-[#FAFAFA]' : 'text-[#52525B]'
+                  }`}
+                >
+                  Stage {idx + 1}
+                </span>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

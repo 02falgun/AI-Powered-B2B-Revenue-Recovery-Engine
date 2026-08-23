@@ -53,209 +53,150 @@ export default function SignupPage() {
       }
 
       if (data.session) {
-        // Auto-logged in
         router.push('/');
         router.refresh();
       } else {
-        // Check email confirmation or proceed to login
-        setSuccessMessage('Account created successfully! Redirecting to sign in…');
-        setTimeout(() => {
-          router.push('/login');
-        }, 1500);
+        setSuccessMessage('Registration successful! Please sign in with your credentials.');
+        setLoading(false);
       }
     } catch {
-      setError('A network error occurred while connecting to auth service.');
+      setError('Network failure during registration.');
       setLoading(false);
     }
   }
 
   return (
-    <div
-      className="min-h-screen flex flex-col justify-center items-center px-4 sm:px-6 py-12 text-slate-50 font-sans relative overflow-hidden"
-      style={{ background: '#060E1F' }}
-    >
-      {/* Background Decorative Glow */}
-      <div
-        className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] pointer-events-none rounded-full opacity-20 blur-[120px]"
-        style={{ background: 'radial-gradient(circle, #3395FF 0%, transparent 70%)' }}
-        aria-hidden="true"
-      />
-
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
-        className="w-full max-w-md space-y-8 relative z-10"
-      >
-        {/* Header Branding */}
-        <div className="flex flex-col items-center text-center space-y-3">
+    <div className="min-h-screen flex flex-col justify-center items-center px-4 sm:px-6 py-12 text-[#FAFAFA] font-sans bg-[#0D0D0E] texture-chassis">
+      {/* Header */}
+      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center space-y-4 mb-6">
+        <div className="flex justify-center">
           <Logo scale={1.2} />
-          <div className="space-y-1">
-            <h1 className="text-xl font-bold font-display text-white tracking-tight">
-              Create RecoverAI Account
-            </h1>
-            <p className="text-xs text-[#7EC8E360]">
-              Register to access AR recovery queue & orchestration
-            </p>
-          </div>
         </div>
+        <div>
+          <h2 className="text-xl font-bold text-[#FAFAFA] font-display">
+            Tenant Account Enrollment
+          </h2>
+          <p className="text-xs text-[#A1A1AA] mt-1">
+            Provision a new operator or admin credential in the RecoverAI tenant registry.
+          </p>
+        </div>
+      </div>
 
-        {/* Signup Card */}
-        <div
-          className="rounded-2xl border border-[#1A2F55] p-7 shadow-floating backdrop-blur-xl"
-          style={{ background: 'linear-gradient(145deg, #0C1A35 0%, #0A162B 100%)' }}
-        >
-          <form onSubmit={handleSignup} className="space-y-5">
-            {/* Error Banner */}
+      {/* Form Chassis */}
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="panel-raised p-8 rounded-xl space-y-6">
+          <form onSubmit={handleSignup} className="space-y-4">
             <AnimatePresence>
               {error && (
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="p-3.5 rounded-xl border border-[#F04E3740] text-[#F04E37] text-xs space-y-1"
-                  style={{ background: '#F04E3710' }}
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  className="p-3.5 rounded bg-[#18181B] border-2 border-[#71717A] text-xs font-mono text-[#FAFAFA]"
                   role="alert"
                 >
-                  <p className="font-semibold font-display">Registration Notice</p>
-                  <p className="opacity-90">{error}</p>
+                  ▲ {error}
                 </motion.div>
               )}
-
               {successMessage && (
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="p-3.5 rounded-xl border border-[#00C48C40] text-[#00C48C] text-xs space-y-1"
-                  style={{ background: '#00C48C10' }}
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  className="p-3.5 rounded bg-[#FAFAFA] text-[#0D0D0E] font-bold text-xs font-mono border border-[#FFFFFF]"
                   role="status"
                 >
-                  <p className="font-semibold font-display">Success</p>
-                  <p className="opacity-90">{successMessage}</p>
+                  ✓ {successMessage}
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Email Field */}
             <div className="space-y-1.5">
-              <label
-                htmlFor="signup-email"
-                className="block text-xs font-semibold font-display text-[#C4D4EC]"
-              >
-                Work Email
+              <label className="text-[10px] font-mono uppercase tracking-wider text-[#71717A] font-bold block">
+                ORGANIZATION EMAIL IDENTIFIER
               </label>
               <input
-                id="signup-email"
                 type="email"
                 required
-                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@company.com"
-                className="w-full px-3.5 py-2.5 rounded-xl text-sm font-mono text-white placeholder-[#7EC8E330] border border-[#1A2F55] bg-[#060E1F]/80 focus:border-[#3395FF] focus:ring-1 focus:ring-[#3395FF] transition-colors outline-none"
+                placeholder="finance@yourorg.com"
+                className="w-full panel-recessed rounded p-3 text-xs font-mono text-[#FAFAFA] placeholder:text-[#52525B] focus:border-[#FAFAFA] focus:outline-none"
               />
             </div>
 
-            {/* Password Field */}
             <div className="space-y-1.5">
-              <label
-                htmlFor="signup-password"
-                className="block text-xs font-semibold font-display text-[#C4D4EC]"
-              >
-                Password (min 6 characters)
+              <label className="text-[10px] font-mono uppercase tracking-wider text-[#71717A] font-bold block">
+                SECURITY PASSPHRASE
               </label>
               <input
-                id="signup-password"
                 type="password"
                 required
-                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••••"
-                className="w-full px-3.5 py-2.5 rounded-xl text-sm font-mono text-white placeholder-[#7EC8E330] border border-[#1A2F55] bg-[#060E1F]/80 focus:border-[#3395FF] focus:ring-1 focus:ring-[#3395FF] transition-colors outline-none"
+                placeholder="Minimum 6 characters"
+                className="w-full panel-recessed rounded p-3 text-xs font-mono text-[#FAFAFA] placeholder:text-[#52525B] focus:border-[#FAFAFA] focus:outline-none"
               />
             </div>
 
-            {/* Role Selection */}
-            <div className="space-y-2">
-              <label className="block text-xs font-semibold font-display text-[#C4D4EC]">
-                Account Role
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-mono uppercase tracking-wider text-[#71717A] font-bold block">
+                ACCESS ROLE LEVEL
               </label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setRole('operator')}
-                  className={`p-3 rounded-xl border text-left transition-all ${
+                  className={`p-3 rounded text-left border transition-all ${
                     role === 'operator'
-                      ? 'border-[#7EC8E3] bg-[#7EC8E315] shadow-sm'
-                      : 'border-[#1A2F55] bg-[#060E1F]/60 opacity-60 hover:opacity-100'
+                      ? 'bg-[#FAFAFA] text-[#0D0D0E] border-[#FFFFFF] font-bold shadow-[0_2px_4px_rgba(0,0,0,0.5)]'
+                      : 'panel-recessed text-[#A1A1AA] border-[#2A2A30]'
                   }`}
                 >
-                  <div className="flex items-center gap-1.5 font-bold font-display text-xs text-[#7EC8E3]">
-                    <span>Operator</span>
-                  </div>
-                  <p className="text-[11px] text-[#C4D4EC]/70 mt-1 leading-snug">
-                    View invoices and submit emails for AI policy recovery
-                  </p>
+                  <div className="text-xs">Finance Operator</div>
+                  <div className="text-[10px] opacity-75 font-mono">Standard Processing</div>
                 </button>
-
                 <button
                   type="button"
                   onClick={() => setRole('admin')}
-                  className={`p-3 rounded-xl border text-left transition-all ${
+                  className={`p-3 rounded text-left border transition-all ${
                     role === 'admin'
-                      ? 'border-[#3395FF] bg-[#3395FF15] shadow-sm'
-                      : 'border-[#1A2F55] bg-[#060E1F]/60 opacity-60 hover:opacity-100'
+                      ? 'bg-[#FAFAFA] text-[#0D0D0E] border-[#FFFFFF] font-bold shadow-[0_2px_4px_rgba(0,0,0,0.5)]'
+                      : 'panel-recessed text-[#A1A1AA] border-[#2A2A30]'
                   }`}
                 >
-                  <div className="flex items-center gap-1.5 font-bold font-display text-xs text-[#3395FF]">
-                    <span>Admin</span>
-                  </div>
-                  <p className="text-[11px] text-[#C4D4EC]/70 mt-1 leading-snug">
-                    Full access + manual override of Human Review cases
-                  </p>
+                  <div className="text-xs">Administrator</div>
+                  <div className="text-[10px] opacity-75 font-mono">Manual Overrides</div>
                 </button>
               </div>
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 rounded-xl text-white font-bold text-sm font-display transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3395FF] motion-safe:hover:-translate-y-px"
-              style={{
-                background: loading ? '#0D5FBF' : '#3395FF',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 16px rgba(51,149,255,0.3)',
-              }}
+              className="btn-mechanical-primary w-full py-3 px-4 rounded text-xs flex items-center justify-center gap-2 mt-2 disabled:opacity-40"
             >
               {loading ? (
                 <>
-                  <span
-                    className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white"
-                    style={{ animation: 'spin-smooth 0.8s linear infinite' }}
-                    aria-hidden="true"
-                  />
-                  <span>Creating Account…</span>
+                  <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                  <span>Registering Tenant Account...</span>
                 </>
               ) : (
-                <span>Register Account</span>
+                <span>Enroll Account & Continue</span>
               )}
             </button>
           </form>
-        </div>
 
-        {/* Link to Login */}
-        <p className="text-center text-xs text-[#7EC8E360]">
-          Already have an account?{' '}
-          <Link
-            href="/login"
-            className="text-[#3395FF] hover:text-[#7EC8E3] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3395FF] rounded"
-          >
-            Sign in here →
-          </Link>
-        </p>
-      </motion.div>
+          <div className="text-center pt-2 border-t border-[#26262B]">
+            <p className="text-xs text-[#71717A]">
+              Already enrolled?{' '}
+              <Link href="/login" className="text-[#FAFAFA] font-bold hover:underline">
+                Sign In to Console →
+              </Link>
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

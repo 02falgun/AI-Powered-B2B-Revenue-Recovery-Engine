@@ -9,6 +9,7 @@ interface CurrentUser {
   id: string;
   email: string;
   role: UserRole;
+  companyId?: string;
 }
 
 export function UserNav() {
@@ -51,14 +52,14 @@ export function UserNav() {
   }
 
   if (loading) {
-    return <div className="h-8 w-32 rounded-xl bg-[#1A2F5530] animate-pulse" />;
+    return <div className="h-8 w-28 rounded bg-[#202024] animate-pulse" />;
   }
 
   if (!user) {
     return (
       <a
         href="/login"
-        className="px-3.5 py-1.5 rounded-xl text-xs font-semibold font-display border border-[#3395FF50] text-[#3395FF] hover:bg-[#3395FF15] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3395FF]"
+        className="px-3.5 py-1.5 rounded text-xs font-bold text-[#0D0D0E] bg-[#FAFAFA] border border-[#FFFFFF] shadow-[0_2px_4px_rgba(0,0,0,0.5)] active:translate-y-[1px] transition-all"
       >
         Sign In
       </a>
@@ -69,40 +70,30 @@ export function UserNav() {
 
   return (
     <div className="flex items-center gap-3">
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[#1A2F55] bg-[#0C1A35]/80 backdrop-blur-sm">
-        {/* User avatar dot */}
-        <div
-          className={`h-2 w-2 rounded-full ${
-            isAdmin ? 'bg-[#3395FF]' : 'bg-[#7EC8E3]'
-          }`}
-          aria-hidden="true"
-        />
-
-        <span className="text-xs font-mono text-[#C4D4EC] max-w-[160px] truncate">
+      {/* Operator Status Capsule */}
+      <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded bg-[#18181B] border border-[#27272A]">
+        <span className="w-1.5 h-1.5 rounded-full bg-[#FAFAFA]" aria-hidden="true" />
+        <span className="text-xs font-mono text-[#D4D4D8]">
           {user.email}
         </span>
-
-        {/* Role badge */}
         <span
-          className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider border ${
+          className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-sm border uppercase ${
             isAdmin
-              ? 'bg-[#3395FF20] text-[#3395FF] border-[#3395FF50]'
-              : 'bg-[#7EC8E315] text-[#7EC8E3] border-[#7EC8E340]'
+              ? 'bg-[#FAFAFA] text-[#0D0D0E] border-[#FFFFFF]'
+              : 'bg-[#202024] text-[#A1A1AA] border-[#3F3F46]'
           }`}
         >
           {user.role}
         </span>
       </div>
 
-      {/* Logout button */}
+      {/* Logout Action Button */}
       <button
-        type="button"
         onClick={handleLogout}
         disabled={loggingOut}
-        aria-label="Sign out"
-        className="px-3 py-1.5 rounded-xl text-xs font-medium font-display text-[#7EC8E380] hover:text-[#F04E37] hover:border-[#F04E3740] border border-[#1A2F55] bg-[#0C1A35]/50 transition-all duration-150 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3395FF]"
+        className="px-3 py-1 rounded text-xs font-semibold text-[#A1A1AA] hover:text-[#FAFAFA] bg-[#1E1E22] hover:bg-[#2A2A30] border border-[#383840] shadow-[0_1px_2px_rgba(0,0,0,0.5)] active:translate-y-[1px] transition-all disabled:opacity-50"
       >
-        {loggingOut ? 'Signing out…' : 'Sign Out'}
+        {loggingOut ? 'Exiting...' : 'Sign Out'}
       </button>
     </div>
   );

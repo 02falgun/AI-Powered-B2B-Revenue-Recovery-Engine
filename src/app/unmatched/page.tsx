@@ -27,11 +27,11 @@ export default function UnmatchedQueuePage() {
       const unmatchedData = await unmatchedRes.json();
       const invoicesData = await invoicesRes.json();
 
-      if (unmatchedData.success) {
+      if (unmatchedData.success && Array.isArray(unmatchedData.data)) {
         setUnmatchedJobs(unmatchedData.data);
       }
-      if (invoicesData.success) {
-        setInvoices(invoicesData.data);
+      if (invoicesData.success && Array.isArray(invoicesData.invoices)) {
+        setInvoices(invoicesData.invoices);
       }
     } catch {
       console.warn('Failed to load unmatched queue data.');
@@ -81,7 +81,6 @@ export default function UnmatchedQueuePage() {
       const data = await res.json();
       if (data.success) {
         setNotification(data.message || 'Email successfully linked to invoice and queued.');
-        // Trigger queue processing worker immediately
         await fetch('/api/cron/process-queue', { method: 'POST' });
         await loadData();
       } else {
@@ -95,27 +94,14 @@ export default function UnmatchedQueuePage() {
   }
 
   return (
-    <div
-      className="min-h-screen text-slate-50 font-sans selection:bg-[#3395FF] selection:text-white"
-      style={{ background: '#060E1F' }}
-    >
-      {/* Background glow effects */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div
-          className="absolute -top-[20%] left-1/2 -translate-x-1/2 w-[900px] h-[450px] rounded-full blur-[140px] opacity-25"
-          style={{ background: 'radial-gradient(circle, #3395FF 0%, transparent 70%)' }}
-        />
-      </div>
-
+    <div className="min-h-screen font-sans bg-[#0D0D0E] text-[#FAFAFA] texture-chassis">
       {/* Top Header */}
-      <header className="relative z-10 border-b border-[#7EC8E315] bg-[#060E1F]/80 backdrop-blur-md sticky top-0">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <Link href="/" className="flex items-center gap-2 group">
-              <Logo />
-            </Link>
-            <div className="h-4 w-px bg-[#7EC8E325]" />
-            <span className="text-xs font-mono tracking-widest text-[#7EC8E3] uppercase">
+      <header className="sticky top-0 z-50 border-b border-[#26262B] bg-[#121214]/90 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Logo scale={1} />
+            <span className="text-[#383840] text-xs">/</span>
+            <span className="text-xs font-mono uppercase tracking-wider text-[#A1A1AA]">
               Unmatched Review Queue
             </span>
           </div>
@@ -123,9 +109,9 @@ export default function UnmatchedQueuePage() {
           <div className="flex items-center gap-3">
             <Link
               href="/"
-              className="text-xs font-medium text-[#7EC8E3] hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-[#7EC8E325] hover:border-[#7EC8E350]"
+              className="btn-mechanical-secondary px-3 py-1.5 rounded text-xs"
             >
-              ← Back to Invoices
+              ← Ledger Console
             </Link>
             <UserNav />
           </div>
@@ -133,43 +119,57 @@ export default function UnmatchedQueuePage() {
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-3">
-              Unmatched Buyer Emails
-              <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-[#E5A93C20] text-[#E5A93C] border border-[#E5A93C40]">
-                {unmatchedJobs.length} In Review
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono tracking-widest text-[#71717A] uppercase font-bold">
+                COMMUNICATION DISPATCH
+              </span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-[#FAFAFA] tracking-tight font-display flex items-center gap-3">
+              Unmatched Inbound Queue
+              <span className="text-xs font-mono px-2.5 py-0.5 rounded border-2 border-[#71717A] bg-[#18181B] text-[#FAFAFA] font-bold">
+                {unmatchedJobs.length} Pending Review
               </span>
             </h1>
-            <p className="mt-1 text-sm text-[#7EC8E390]">
-              Incoming emails where automated matching was uncertain. Review and manually assign to an overdue invoice.
+            <p className="mt-1 text-sm text-[#A1A1AA]">
+              Inbound communications where automated heuristics required human operator verification.
             </p>
           </div>
 
           <button
             onClick={handleTriggerPoll}
             disabled={polling}
-            className="self-start md:self-auto px-4 py-2 rounded-xl text-xs font-semibold bg-[#3395FF]/15 hover:bg-[#3395FF]/30 border border-[#3395FF]/40 text-[#7EC8E3] transition-all flex items-center gap-2 shadow-lg cursor-pointer disabled:opacity-50"
+            className="btn-mechanical-primary self-start md:self-auto px-4 py-2.5 rounded-lg flex items-center gap-2 text-xs"
           >
-            <span className={`h-2 w-2 rounded-full ${polling ? 'bg-[#E5A93C] animate-ping' : 'bg-[#10B981]'}`} />
-            {polling ? 'Polling Mailbox…' : 'Poll Mailbox Now'}
+            {polling ? (
+              <>
+                <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                <span>Polling Ingestion Engine...</span>
+              </>
+            ) : (
+              <>
+                <span aria-hidden="true">⟳</span>
+                <span>Poll Inbound Mailbox Now</span>
+              </>
+            )}
           </button>
         </div>
 
-        {/* Notification banner */}
+        {/* Status Notification */}
         <AnimatePresence>
           {notification && (
             <motion.div
-              initial={{ opacity: 0, y: -10 }}
+              initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="mb-6 p-4 rounded-xl text-xs font-mono bg-[#3395FF]/10 border border-[#3395FF]/30 text-[#7EC8E3] flex justify-between items-center"
+              exit={{ opacity: 0, y: -4 }}
+              className="p-4 rounded-lg panel-raised border border-[#52525B] text-xs font-mono flex items-center justify-between text-[#FAFAFA]"
             >
               <span>{notification}</span>
               <button
                 onClick={() => setNotification(null)}
-                className="text-[#7EC8E3] hover:text-white font-bold ml-4 cursor-pointer"
+                className="text-[#71717A] hover:text-[#FAFAFA] font-bold text-sm"
               >
                 ✕
               </button>
@@ -177,72 +177,89 @@ export default function UnmatchedQueuePage() {
           )}
         </AnimatePresence>
 
+        {/* Content List */}
         {loading ? (
-          <div className="text-center py-20 text-xs font-mono text-[#7EC8E3]">
-            Loading unmatched review queue…
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="panel-raised p-6 rounded-xl space-y-4 animate-pulse">
+                <div className="h-4 w-1/3 bg-[#202024] rounded" />
+                <div className="h-16 w-full bg-[#161618] rounded" />
+              </div>
+            ))}
           </div>
         ) : unmatchedJobs.length === 0 ? (
-          <div className="text-center py-20 rounded-2xl border border-[#7EC8E315] bg-[#0A1628]/40 backdrop-blur-sm">
-            <div className="text-3xl mb-2">📬</div>
-            <h3 className="text-base font-semibold text-white">All Ingested Emails Matched</h3>
-            <p className="text-xs text-[#7EC8E380] max-w-sm mx-auto mt-1">
-              There are currently no unmatched emails requiring manual review. New buyer communications will automatically appear here if ambiguous.
+          <div className="panel-recessed p-12 rounded-xl text-center space-y-3">
+            <div className="text-3xl text-[#52525B]" aria-hidden="true">
+              ✓
+            </div>
+            <h3 className="text-base font-bold text-[#FAFAFA] font-display">
+              Review Queue Clear
+            </h3>
+            <p className="text-xs text-[#71717A] max-w-md mx-auto">
+              All ingested buyer emails have been matched to invoices or processed by the policy pipeline.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6">
+          <div className="space-y-4">
             {unmatchedJobs.map((job) => (
-              <motion.div
+              <div
                 key={job.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-6 rounded-2xl border border-[#7EC8E325] bg-[#0A1628]/60 backdrop-blur-md shadow-xl"
+                className="panel-raised rounded-xl p-6 space-y-4"
               >
-                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 pb-4 border-b border-[#7EC8E315]">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#26262B]">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-mono text-[#7EC8E3] px-2 py-0.5 rounded bg-[#7EC8E315] border border-[#7EC8E330]">
-                        {job.sender}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-[#FAFAFA]">
+                        {job.sender || 'Unknown Sender'}
                       </span>
-                      <span className="text-xs text-[#7EC8E360]">
-                        Received: {new Date(job.createdAt).toLocaleString()}
+                      <span className="text-xs text-[#71717A] font-mono">
+                        // {new Date(job.createdAt).toLocaleString()}
                       </span>
                     </div>
-                    <h3 className="text-base font-semibold text-white">{job.subject}</h3>
+                    <p className="text-xs text-[#A1A1AA] font-mono mt-0.5">
+                      Subject: {job.subject || '(No Subject)'}
+                    </p>
                   </div>
+                  <span className="self-start sm:self-auto text-[10px] font-mono px-2 py-0.5 rounded border border-[#52525B] bg-[#18181B] text-[#FAFAFA] font-bold">
+                    STATUS: UNMATCHED
+                  </span>
+                </div>
 
-                  {/* Manual Assignment Selector */}
-                  <div className="flex items-center gap-2 w-full lg:w-auto">
+                {/* Email Content Snippet */}
+                <div className="panel-recessed p-4 rounded-lg">
+                  <p className="text-xs text-[#D4D4D8] font-mono whitespace-pre-wrap leading-relaxed">
+                    {job.body}
+                  </p>
+                </div>
+
+                {/* Assignment Controls */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+                  <div className="flex-1 max-w-md">
                     <select
                       value={selectedInvoiceMap[job.id] || ''}
                       onChange={(e) =>
                         setSelectedInvoiceMap({ ...selectedInvoiceMap, [job.id]: e.target.value })
                       }
-                      className="text-xs bg-[#060E1F] border border-[#7EC8E335] text-slate-100 rounded-xl px-3 py-2 outline-none focus:border-[#3395FF] flex-1 lg:w-64 cursor-pointer"
+                      className="w-full panel-recessed rounded px-3 py-2 text-xs text-[#FAFAFA] border border-[#383840] focus:border-[#FAFAFA] focus:outline-none font-mono"
                     >
-                      <option value="">-- Select Overdue Invoice --</option>
+                      <option value="">-- Select Target Overdue Invoice --</option>
                       {invoices.map((inv) => (
                         <option key={inv.id} value={inv.id}>
-                          {inv.invoiceNumber} ({inv.customerName} - ₹{(inv.outstandingAmountPaise / 100).toLocaleString()})
+                          {inv.invoiceNumber} - {inv.customerName} (₹{(inv.outstandingAmountPaise / 100).toFixed(2)})
                         </option>
                       ))}
                     </select>
-
-                    <button
-                      onClick={() => handleLinkEmail(job.id)}
-                      disabled={assigningId === job.id || !selectedInvoiceMap[job.id]}
-                      className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#3395FF] text-white hover:bg-[#3395FF]/90 transition-colors shadow disabled:opacity-40 cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
-                    >
-                      {assigningId === job.id ? 'Queuing…' : 'Assign & Queue →'}
-                    </button>
                   </div>
-                </div>
 
-                {/* Email Body Preview */}
-                <div className="mt-4 p-4 rounded-xl bg-[#060E1F]/70 border border-[#7EC8E315] text-xs font-mono text-slate-300 whitespace-pre-wrap leading-relaxed">
-                  {job.body}
+                  <button
+                    onClick={() => handleLinkEmail(job.id)}
+                    disabled={assigningId === job.id || !selectedInvoiceMap[job.id]}
+                    className="btn-mechanical-primary px-4 py-2 rounded text-xs disabled:opacity-40"
+                  >
+                    {assigningId === job.id ? 'Linking...' : 'Link to Invoice & Queue'}
+                  </button>
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
         )}

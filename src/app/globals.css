@@ -1,42 +1,43 @@
 @import "tailwindcss";
 
 /* ============================================================
-   RECOVERAI DESIGN SYSTEM — Tailwind v4 Token Definitions
-   All tokens via @theme {} — no tailwind.config.js needed.
-   Source: Razorpay Blade design system + RecoverAI originals.
+   RECOVERAI PHYSICAL CONTROL PANEL — Grayscale Token Definitions
+   All tokens via @theme {} — strict zero-hue grayscale axis.
    ============================================================ */
 
 @theme {
-  /* --- Razorpay Brand Blues (verified from Blade / brand docs) --- */
-  --color-rzp-ink:        #012652;
-  --color-rzp-ocean:      #0D5FBF;
-  --color-rzp-electric:   #3395FF;
-  --color-rzp-sky:        #7EC8E3;
-  --color-rzp-chrome:     #E8F0FE;
+  /* --- Grayscale Chassis & Panel Surfaces --- */
+  --color-panel-chassis:    #0D0D0E;
+  --color-panel-surface:    #161618;
+  --color-panel-raised:     #202024;
+  --color-panel-recessed:   #080809;
+  --color-panel-plate:      #2A2A30;
 
-  /* --- RecoverAI Original Surface Tokens --- */
-  --color-recover-bg:      #060E1F;
-  --color-recover-surface: #0C1A35;
-  --color-recover-raised:  #112040;
-  --color-recover-border:  #1A2F55;
-  --color-recover-border-subtle: #0F1F3D;
+  /* --- Milled Metal & Bevel Borders --- */
+  --color-bezel-dark:       #1B1B1E;
+  --color-bezel-subtle:     #26262B;
+  --color-bezel-mid:        #383840;
+  --color-bezel-highlight:  #50505A;
 
-  /* --- Semantic / Status Tokens --- */
-  --color-recover-mint:   #00C48C;
-  --color-recover-mint-dim: #00C48C26;
-  --color-recover-amber:  #F5A623;
-  --color-recover-amber-dim: #F5A62326;
-  --color-recover-red:    #F04E37;
-  --color-recover-red-dim:  #F04E3726;
+  /* --- Readout & Inscribed Typography --- */
+  --color-ink-white:        #FAFAFA;
+  --color-ink-silver:       #D4D4D8;
+  --color-ink-dim:          #A1A1AA;
+  --color-ink-etched:       #71717A;
+  --color-ink-recessed:     #52525B;
+
+  /* --- Mechanical State Tokens --- */
+  --color-switch-on:        #FAFAFA;
+  --color-switch-off:       #27272A;
 
   /* --- Typography --- */
-  --font-display: "Space Grotesk", "Geist Sans", sans-serif;
-  --font-sans:    var(--font-geist-sans), system-ui, sans-serif;
-  --font-mono:    var(--font-geist-mono), "Courier New", monospace;
+  --font-display: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --font-sans:    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "JetBrains Mono", "Courier New", monospace;
 }
 
 /* ============================================================
-   BASE LAYER — Global resets & typography baseline
+   BASE LAYER — Physical metal canvas & reset
    ============================================================ */
 @layer base {
   *, *::before, *::after {
@@ -44,21 +45,22 @@
   }
 
   :root {
-    --background: #060E1F;
-    --foreground: #E2EAF4;
+    --background: #0D0D0E;
+    --foreground: #FAFAFA;
   }
 
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scroll-behavior: smooth;
+    background-color: #0D0D0E;
   }
 
   body {
-    background-color: var(--color-recover-bg, #060E1F);
-    color: #E2EAF4;
+    background-color: #0D0D0E;
+    color: #FAFAFA;
     font-family: var(--font-sans);
-    line-height: 1.6;
+    line-height: 1.5;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -68,175 +70,113 @@
     letter-spacing: -0.02em;
   }
 
-  /* --- Keyboard focus visible — accessible on all interactive elements --- */
+  /* --- Crisp Monochrome Focus Ring --- */
   :focus-visible {
-    outline: 2px solid #3395FF;
+    outline: 2px solid #FAFAFA;
     outline-offset: 3px;
     border-radius: 4px;
   }
 
-  /* Remove default focus ring — we handle it with focus-visible */
   :focus:not(:focus-visible) {
     outline: none;
   }
 }
 
 /* ============================================================
-   UTILITIES — Depth / elevation shadow system
+   UTILITIES — Real 3D Physical Elevation & Recessed Insets
    ============================================================ */
 @layer utilities {
-  /* Tier 1 — Surface (default card state) */
-  .shadow-surface {
+  /* Raised Panel (Instrument casing with top highlight reflection) */
+  .panel-raised {
+    background-color: #161618;
+    border: 1px solid #26262B;
     box-shadow:
-      0 1px 3px rgba(1, 38, 82, 0.5),
-      0 4px 16px rgba(1, 38, 82, 0.25);
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 4px 12px rgba(0, 0, 0, 0.6),
+      0 1px 2px rgba(0, 0, 0, 0.8);
   }
 
-  /* Tier 2 — Raised (hover/active card) */
-  .shadow-raised {
+  /* Recessed Instrument Well / Counter Display */
+  .panel-recessed {
+    background-color: #080809;
+    border: 1px solid #1E1E22;
     box-shadow:
-      0 4px 12px rgba(1, 38, 82, 0.6),
-      0 16px 40px rgba(1, 38, 82, 0.35),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      inset 0 2px 5px rgba(0, 0, 0, 0.9),
+      inset 0 0 1px rgba(255, 255, 255, 0.05),
+      0 1px 0 rgba(255, 255, 255, 0.04);
   }
 
-  /* Tier 3 — Floating (key panels, payment link card) */
-  .shadow-floating {
+  /* Solid Mechanical Button (tactile press) */
+  .btn-mechanical-primary {
+    background-color: #FAFAFA;
+    color: #0D0D0E;
+    font-weight: 600;
+    border: 1px solid #FFFFFF;
     box-shadow:
-      0 8px 32px rgba(13, 95, 191, 0.4),
-      0 32px 64px rgba(1, 38, 82, 0.55),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      0 3px 0 #202024,
+      0 4px 6px rgba(0, 0, 0, 0.6);
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
   }
 
-  /* Interactive bevel (for buttons) */
-  .bevel {
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  .btn-mechanical-primary:hover {
+    background-color: #EEEEEE;
   }
 
-  /* Glow utilities */
-  .glow-mint {
-    box-shadow: 0 0 16px rgba(0, 196, 140, 0.35), 0 0 40px rgba(0, 196, 140, 0.15);
+  .btn-mechanical-primary:active {
+    transform: translateY(2px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.4),
+      0 1px 0 #202024,
+      0 2px 3px rgba(0, 0, 0, 0.8);
   }
 
-  .glow-electric {
-    box-shadow: 0 0 16px rgba(51, 149, 255, 0.35), 0 0 40px rgba(51, 149, 255, 0.15);
+  /* Secondary Rocker / Beveled Dark Button */
+  .btn-mechanical-secondary {
+    background-color: #202024;
+    color: #FAFAFA;
+    font-weight: 500;
+    border: 1px solid #383840;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 2px 0 #000000,
+      0 3px 6px rgba(0, 0, 0, 0.5);
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
   }
 
-  .glow-amber {
-    box-shadow: 0 0 12px rgba(245, 166, 35, 0.35);
+  .btn-mechanical-secondary:hover {
+    background-color: #2A2A30;
   }
 
-  /* Mesh gradient behind hero amounts */
-  .mesh-hero {
-    background: radial-gradient(
-      ellipse at 50% 0%,
-      rgba(51, 149, 255, 0.12) 0%,
-      transparent 70%
-    );
+  .btn-mechanical-secondary:active {
+    transform: translateY(2px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 0 0 #000000,
+      0 1px 2px rgba(0, 0, 0, 0.8);
   }
 
-  .mesh-mint {
-    background: radial-gradient(
-      ellipse at 50% 0%,
-      rgba(0, 196, 140, 0.1) 0%,
-      transparent 70%
-    );
+  /* Physical Rocker Switch State */
+  .rocker-switch-engaged {
+    background: linear-gradient(180deg, #FAFAFA 0%, #E4E4E7 100%);
+    color: #0D0D0E;
+    box-shadow:
+      inset 0 1px 0 #FFFFFF,
+      0 2px 4px rgba(0, 0, 0, 0.6);
   }
 
-  /* Circuit trace background pattern for guardrail panel */
-  .circuit-bg {
-    background-image:
-      linear-gradient(rgba(51, 149, 255, 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(51, 149, 255, 0.04) 1px, transparent 1px);
-    background-size: 24px 24px;
-    background-position: 0 0;
+  .rocker-switch-tripped {
+    background: linear-gradient(180deg, #202024 0%, #161618 100%);
+    color: #A1A1AA;
+    border: 1px solid #383840;
+    box-shadow:
+      inset 0 2px 4px rgba(0, 0, 0, 0.8),
+      0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
-  /* Font utility for display headings */
-  .font-display {
-    font-family: var(--font-display);
+  /* Subtle Metal/Panel Texture */
+  .texture-chassis {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 0);
+    background-size: 20px 20px;
   }
-}
-
-/* ============================================================
-   ANIMATIONS — Keyframes for non-Framer elements
-   ============================================================ */
-@keyframes pulse-ring {
-  0%   { opacity: 0.8; transform: scale(1); }
-  100% { opacity: 0; transform: scale(2); }
-}
-
-@keyframes shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-@keyframes led-flicker {
-  0%, 100% { opacity: 1; }
-  25%       { opacity: 0.6; }
-  75%       { opacity: 0.85; }
-}
-
-@keyframes float-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes spin-smooth {
-  to { transform: rotate(360deg); }
-}
-
-/* Skeleton shimmer animation */
-@keyframes skeleton-shimmer {
-  0%   { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
-}
-
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    rgba(26, 47, 85, 0.8) 0%,
-    rgba(51, 149, 255, 0.08) 50%,
-    rgba(26, 47, 85, 0.8) 100%
-  );
-  background-size: 400px 100%;
-  animation: skeleton-shimmer 1.4s ease-in-out infinite;
-}
-
-/* ============================================================
-   PREFERS-REDUCED-MOTION — accessibility floor
-   ============================================================ */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-
-  /* Keep opacity transitions for non-motion users but remove transforms */
-  .motion-safe-transform {
-    transform: none !important;
-  }
-}
-
-/* ============================================================
-   SCROLLBAR — styled to match dark theme
-   ============================================================ */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: #060E1F;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #1A2F55;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #3395FF40;
 }

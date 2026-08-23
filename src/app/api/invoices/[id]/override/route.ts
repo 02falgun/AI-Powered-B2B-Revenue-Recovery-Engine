@@ -71,12 +71,14 @@ export async function POST(
     adminActor: adminUser.email,
     reason,
     approvedPaise,
+    requiredCompanyId: adminUser.companyId,
   });
 
   if (!overrideResult.ok) {
+    const isUnauthorized = overrideResult.error.code === 'unauthorized_error';
     return NextResponse.json(
       { success: false, error: overrideResult.error },
-      { status: 500 },
+      { status: isUnauthorized ? 403 : 500 },
     );
   }
 

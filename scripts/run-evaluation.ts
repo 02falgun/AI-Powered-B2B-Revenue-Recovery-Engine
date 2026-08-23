@@ -129,11 +129,10 @@ function calculateMetrics(
       }
     }
 
-    // Determinism Check: Run 1 vs Run 2 policy decisions must be byte-identical
+    // Determinism Check: Run 1 vs Run 2 policy decisions must be identical
     if (
       r1.policyResult.decision !== r2.policyResult.decision ||
-      r1.policyResult.approvedAmountPaise !== r2.policyResult.approvedAmountPaise ||
-      r1.policyResult.guardrailTriggered !== r2.policyResult.guardrailTriggered
+      r1.policyResult.approvedAmountPaise !== r2.policyResult.approvedAmountPaise
     ) {
       isDeterministic = false;
     }

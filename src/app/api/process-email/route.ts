@@ -5,6 +5,9 @@ import { evaluatePolicy } from '@/lib/policy';
 import { createTestPaymentLink } from '@/lib/razorpay';
 import { getCurrentUser } from '@/lib/auth';
 import { checkProcessEmailRateLimit } from '@/lib/ratelimit';
+import { logger } from '@/lib/logger';
+import { captureScrubbedException } from '@/lib/sentry';
+import { recordFailureAndCheckAlert } from '@/lib/alerts';
 import type { ExtractedIntent } from '@/lib/ai-schema';
 
 export interface ProcessEmailRequestBody {
@@ -132,17 +135,30 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  // 1. Authoritative DB Invoice Lookup
-  const invoiceResult = await getInvoiceById(invoiceId);
+  // 1. Authoritative DB Invoice Lookup with Multi-Tenant Scoping
+  const requiredCompanyId = userResult.ok ? userResult.data.companyId : undefined;
+  const invoiceResult = await getInvoiceById(invoiceId, requiredCompanyId);
 
-  let invoice;
+  let invoice: import('@/lib/types').Invoice;
   if (invoiceResult.ok) {
     invoice = invoiceResult.data;
   } else {
+    if (invoiceResult.error.code === 'unauthorized_error') {
+      return NextResponse.json(
+        {
+          success: false,
+          failureCode: 'unauthorized_error',
+          error: invoiceResult.error,
+        },
+        { status: 403 },
+      );
+    }
+
     // Fallback mock invoices for local dev testing when DB is unseeded
-    const MOCK_INVOICES = [
+    const MOCK_INVOICES: import('@/lib/types').Invoice[] = [
       {
         id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+        companyId: '00000000-0000-0000-0000-000000000001',
         invoiceNumber: 'INV-2026-001',
         customerName: 'Acme Corporation',
         customerEmail: 'finance@acmecorp.com',
@@ -156,6 +172,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       },
       {
         id: 'b78ac20c-69dd-4483-b678-1f03c3d4e580',
+        companyId: '00000000-0000-0000-0000-000000000001',
         invoiceNumber: 'INV-2026-002',
         customerName: 'TechFlow Solutions',
         customerEmail: 'billing@techflow.io',
@@ -169,6 +186,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       },
       {
         id: 'c89bd30d-70ee-5594-c789-2a04d4e5f691',
+        companyId: '00000000-0000-0000-0000-000000000001',
         invoiceNumber: 'INV-2026-003',
         customerName: 'Global Logistics Ltd',
         customerEmail: 'ap@globallogistics.com',
@@ -213,9 +231,36 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   if (aiResult.ok) {
     extractedIntent = aiResult.data;
+    logger.logAiExtraction({
+      invoiceId: invoice.id,
+      companyId: invoice.companyId || '00000000-0000-0000-0000-000000000001',
+      success: true,
+      intent: extractedIntent.intent,
+      confidence: extractedIntent.confidence,
+    });
   } else {
-    // Phase 4 Requirement 2: Fail closed on AI timeout or extraction error
-    console.error(`[Process Email AI Failure] ${aiResult.error.message}`);
+    // Fail closed on AI timeout or extraction error
+    logger.logAiExtraction({
+      invoiceId: invoice.id,
+      companyId: invoice.companyId || '00000000-0000-0000-0000-000000000001',
+      success: false,
+      errorType: aiResult.error.code,
+    });
+
+    // Capture scrubbed error to Sentry
+    captureScrubbedException(new Error(aiResult.error.message), {
+      invoiceId: invoice.id,
+      companyId: invoice.companyId,
+      errorType: 'AI_EXTRACTION_FAILURE',
+    });
+
+    // Record failure in sliding window alert tracker
+    await recordFailureAndCheckAlert({
+      type: 'ai_failure',
+      invoiceId: invoice.id,
+      companyId: invoice.companyId,
+      reason: aiResult.error.message,
+    });
 
     const failureReason = `AI intent extraction failure: ${aiResult.error.message}. Routed to HUMAN_REVIEW.`;
 
@@ -257,6 +302,24 @@ export async function POST(request: Request): Promise<NextResponse> {
     extraction: extractedIntent,
     outstandingAmountPaise: invoice.outstandingAmountPaise,
   });
+
+  // Log structured policy decision
+  logger.logPolicyDecision({
+    invoiceId: invoice.id,
+    companyId: invoice.companyId || '00000000-0000-0000-0000-000000000001',
+    decision: policyDecision.decision,
+    guardrailTriggered: policyDecision.guardrailTriggered,
+    approvedPaise: policyDecision.approvedAmountPaise,
+  });
+
+  if (policyDecision.decision === 'HUMAN_REVIEW') {
+    await recordFailureAndCheckAlert({
+      type: 'guardrail_rejection',
+      invoiceId: invoice.id,
+      companyId: invoice.companyId,
+      reason: policyDecision.reason,
+    });
+  }
 
   let paymentLinkId: string | null = null;
   let paymentLinkUrl: string | null = null;

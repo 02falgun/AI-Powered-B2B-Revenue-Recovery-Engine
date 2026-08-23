@@ -23,8 +23,15 @@ export type Result<T, E = AppError> =
 
 export type InvoiceStatus = 'overdue' | 'paid' | 'partially_paid' | 'in_recovery' | 'human_review';
 
+export interface Company {
+  readonly id: string;
+  readonly name: string;
+  readonly createdAt: string;
+}
+
 export interface Invoice {
   readonly id: string;
+  readonly companyId?: string;
   readonly invoiceNumber: string;
   readonly customerName: string;
   readonly customerEmail: string;
@@ -40,6 +47,7 @@ export interface Invoice {
 export interface AuditLog {
   readonly id: string;
   readonly invoiceId: string;
+  readonly companyId?: string;
   readonly action: string;
   readonly actor: string;
   readonly metadata: Readonly<Record<string, unknown>>;
@@ -51,6 +59,7 @@ export type UserRole = 'admin' | 'operator';
 export interface UserProfile {
   readonly id: string;
   readonly role: UserRole;
+  readonly companyId?: string;
   readonly email?: string;
   readonly createdAt: string;
 }
@@ -59,6 +68,7 @@ export interface AuthenticatedUser {
   readonly id: string;
   readonly email: string;
   readonly role: UserRole;
+  readonly companyId?: string;
 }
 
 export type EmailJobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'unmatched';
@@ -70,10 +80,26 @@ export interface IngestedEmailJob {
   readonly subject: string;
   readonly body: string;
   readonly invoiceId: string | null;
+  readonly companyId?: string;
   readonly status: EmailJobStatus;
   readonly errorMessage: string | null;
   readonly attempts: number;
   readonly processedAt: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
+}
+
+export interface PaginationParams {
+  readonly page?: number;
+  readonly limit?: number;
+  readonly status?: InvoiceStatus;
+  readonly companyId?: string;
+}
+
+export interface PaginatedResult<T> {
+  readonly items: readonly T[];
+  readonly total: number;
+  readonly page: number;
+  readonly limit: number;
+  readonly totalPages: number;
 }

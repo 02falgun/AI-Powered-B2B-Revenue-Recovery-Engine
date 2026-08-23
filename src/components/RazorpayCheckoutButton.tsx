@@ -114,17 +114,15 @@ export function RazorpayCheckoutButton({
           invoice_id: invoiceId,
         },
         theme: {
-          color: '#4f46e5', // Indigo modern theme
+          color: '#0D0D0E',
         },
         handler: async function (response: {
           razorpay_payment_id: string;
           razorpay_order_id: string;
           razorpay_signature: string;
         }) {
-          setStatusMessage('Verifying payment signature with backend...');
-
           try {
-            // STEP 3: Verify Payment Signature on Backend
+            // 4. Verify payment signature on backend
             const verifyRes = await fetch('/api/verify-payment', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -132,25 +130,23 @@ export function RazorpayCheckoutButton({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
-                invoice_id: invoiceId,
-                amount_paid_paise: amountPaise,
+                invoiceId,
               }),
             });
 
             const verifyData = await verifyRes.json();
 
-            if (verifyData.success && verifyData.verified) {
-              setStatusMessage('✅ Payment verified successfully!');
+            if (verifyData.success) {
+              setStatusMessage('Payment verified successfully!');
               onPaymentSuccess?.(verifyData);
             } else {
-              const errorMsg =
-                verifyData.error ?? 'Payment verification failed: invalid signature.';
-              setStatusMessage(`❌ Verification Failed: ${errorMsg}`);
+              const errorMsg = verifyData.error ?? 'Payment verification failed.';
+              setStatusMessage(`Verification Error: ${errorMsg}`);
               onPaymentError?.(errorMsg);
             }
           } catch (err: unknown) {
-            const errorMsg = err instanceof Error ? err.message : 'Verification request failed';
-            setStatusMessage(`❌ Error: ${errorMsg}`);
+            const errorMsg = err instanceof Error ? err.message : 'Payment verification network error';
+            setStatusMessage(`Error: ${errorMsg}`);
             onPaymentError?.(errorMsg);
           } finally {
             setLoading(false);
@@ -159,23 +155,13 @@ export function RazorpayCheckoutButton({
         modal: {
           ondismiss: function () {
             setLoading(false);
-            console.log('[Razorpay Modal] User dismissed checkout modal.');
+            setStatusMessage('Checkout dismissed by user.');
           },
         },
       };
 
-      // 4. Open Razorpay Checkout Modal
-      const razorpayInstance = new window.Razorpay(options);
-
-      razorpayInstance.on('payment.failed', function (resp: Record<string, unknown>) {
-        const errorObj = (resp.error ?? {}) as Record<string, unknown>;
-        const failReason = String(errorObj.description ?? 'Payment processing failed.');
-        setStatusMessage(`❌ Payment Failed: ${failReason}`);
-        onPaymentError?.(failReason);
-        setLoading(false);
-      });
-
-      razorpayInstance.open();
+      const rzp = new window.Razorpay(options);
+      rzp.open();
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Checkout initiation error';
       setStatusMessage(`Error: ${errorMsg}`);
@@ -192,24 +178,24 @@ export function RazorpayCheckoutButton({
         disabled={loading || amountPaise < 100}
         className={
           className ||
-          'inline-flex items-center justify-center gap-2 py-3 px-5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-sm transition-colors shadow-md'
+          'inline-flex items-center justify-center gap-2 py-2.5 px-5 rounded-lg bg-[#FAFAFA] hover:bg-[#E4E4E7] active:translate-y-[2px] disabled:opacity-40 text-[#0D0D0E] font-bold text-sm border border-[#FFFFFF] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_3px_0_#202024,0_4px_6px_rgba(0,0,0,0.6)] transition-all'
         }
       >
         {loading ? (
           <>
-            <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
-            <span>Opening Checkout...</span>
+            <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+            <span>Opening Gateway...</span>
           </>
         ) : (
           <>
-            <span>💳</span>
+            <span aria-hidden="true">💳</span>
             <span>{buttonText}</span>
           </>
         )}
       </button>
 
       {statusMessage && (
-        <div className="text-xs font-mono text-center px-2 py-1 bg-slate-900 border border-slate-800 rounded text-slate-300">
+        <div className="text-xs font-mono text-center px-3 py-1.5 panel-recessed rounded text-[#D4D4D8]">
           {statusMessage}
         </div>
       )}

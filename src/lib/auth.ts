@@ -29,6 +29,10 @@ export async function getCurrentUser(): Promise<Result<AuthenticatedUser, AppErr
       profileResult.ok && profileResult.data.role
         ? profileResult.data.role
         : (user.user_metadata?.role as UserRole) || 'operator';
+    const companyId: string =
+      profileResult.ok && profileResult.data.companyId
+        ? profileResult.data.companyId
+        : (user.user_metadata?.company_id as string) || '00000000-0000-0000-0000-000000000001';
 
     return {
       ok: true,
@@ -36,6 +40,7 @@ export async function getCurrentUser(): Promise<Result<AuthenticatedUser, AppErr
         id: user.id,
         email,
         role,
+        companyId,
       },
     };
   } catch (err: unknown) {

@@ -150,3 +150,29 @@ CREATE POLICY "Allow authenticated write on ingested_email_jobs"
     USING (true)
     WITH CHECK (true);
 
+-- ============================================================================
+-- Phase P5: Multi-Company / Multi-Tenant Isolation
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.companies (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO public.companies (id, name, created_at, updated_at)
+VALUES ('00000000-0000-0000-0000-000000000001', 'Acme Global Services', now(), now())
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) DEFAULT '00000000-0000-0000-0000-000000000001';
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) DEFAULT '00000000-0000-0000-0000-000000000001';
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) DEFAULT '00000000-0000-0000-0000-000000000001';
+ALTER TABLE public.ingested_email_jobs ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.companies(id) DEFAULT '00000000-0000-0000-0000-000000000001';
+
+CREATE INDEX IF NOT EXISTS idx_invoices_company_status ON public.invoices(company_id, status);
+CREATE INDEX IF NOT EXISTS idx_invoices_company_created_at ON public.invoices(company_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_company_created_at ON public.audit_logs(company_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_company ON public.user_profiles(company_id);
+CREATE INDEX IF NOT EXISTS idx_ingested_email_jobs_company_status ON public.ingested_email_jobs(company_id, status);
+
+

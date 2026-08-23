@@ -358,9 +358,13 @@ npm run demo:rehearse          # Live demo rehearsal runner (determinism check)
 - [x] **Phase P2 (Hardening)** — Upstash Redis Sliding-Window Rate Limiter & Email Size Boundary
 - [x] **Phase P3 (Hardening)** — Exponential Backoff + Jitter Retry Engine (`src/lib/retry.ts`)
 - [x] **Phase P4 (Hardening)** — IMAP Ingestion Connector, Invoice Matcher, Table Queue Worker, `/unmatched` UI
+- [x] **Phase P5 (Hardening)** — Multi-Company / Multi-Tenant Data Model with RLS, additive migration & pagination
+- [x] **Phase P6 (Hardening)** — Sentry SDK (with strict PII/secret scrubbing), UptimeRobot probes, structured JSON logging, failure alerting
+- [x] **UI Redesign (v2)** — Physical Control Panel, pure monochrome grayscale palette, real 3D depth, 8-switch rocker annunciator bank
 
 ---
 
 **Live Demo & Submission Docs:** [`docs/demo-script.md`](docs/demo-script.md) | [`docs/judge-qa-prep.md`](docs/judge-qa-prep.md)  
 **Evaluation Report:** [`docs/evaluation-report.md`](docs/evaluation-report.md)  
-**Design Tokens & System:** [`docs/design-system.md`](docs/design-system.md)
+**Design Tokens & System:** [`docs/design-system.md`](docs/design-system.md) | [`docs/uptimerobot-setup.md`](docs/uptimerobot-setup.md)
+

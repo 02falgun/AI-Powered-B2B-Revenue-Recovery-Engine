@@ -8,68 +8,70 @@ interface InvoiceStatusBadgeProps {
 }
 
 /**
- * InvoiceStatusBadge — elevated pill with bevel highlight.
- * Color map uses RecoverAI design tokens, not raw Tailwind defaults.
+ * InvoiceStatusBadge — Color-Free Status Indicator.
+ * Differentiated by shape, weight, border style, and iconography.
  */
 export function InvoiceStatusBadge({ status, className = '' }: InvoiceStatusBadgeProps) {
   const normalized = status.toLowerCase();
 
   type BadgeConfig = {
     label: string;
-    dot: string;
+    icon: string;
     styles: string;
   };
 
   const configs: Record<string, BadgeConfig> = {
     overdue: {
-      label: 'Overdue',
-      dot: 'bg-[#F04E37]',
+      label: 'OVERDUE',
+      icon: '⏱',
       styles:
-        'bg-[#F04E3715] text-[#F04E37] border-[#F04E3740] ' +
-        'shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_8px_rgba(240,78,55,0.15)]',
+        'bg-[#1C1C20] text-[#FAFAFA] border border-[#52525B] ' +
+        'shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.6)] font-semibold',
     },
     paid: {
-      label: 'Paid in Full',
-      dot: 'bg-[#00C48C]',
+      label: 'SETTLED',
+      icon: '✓',
       styles:
-        'bg-[#00C48C15] text-[#00C48C] border-[#00C48C40] ' +
-        'shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_8px_rgba(0,196,140,0.15)]',
+        'bg-[#FAFAFA] text-[#0D0D0E] border border-[#FFFFFF] ' +
+        'shadow-[0_2px_4px_rgba(0,0,0,0.5)] font-bold',
     },
     partially_paid: {
-      label: 'Partially Paid',
-      dot: 'bg-[#3395FF]',
+      label: 'PARTIALLY PAID',
+      icon: '◐',
       styles:
-        'bg-[#3395FF15] text-[#3395FF] border-[#3395FF40] ' +
-        'shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_8px_rgba(51,149,255,0.15)]',
+        'bg-[#202024] text-[#E4E4E7] border border-[#3F3F46] ' +
+        'shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] font-medium',
     },
     in_recovery: {
-      label: 'In Recovery',
-      dot: 'bg-[#7EC8E3]',
+      label: 'IN RECOVERY',
+      icon: '⟳',
       styles:
-        'bg-[#7EC8E315] text-[#7EC8E3] border-[#7EC8E340] ' +
-        'shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]',
+        'bg-[#141416] text-[#A1A1AA] border border-dashed border-[#52525B] ' +
+        'shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] font-medium',
     },
     human_review: {
-      label: 'Human Review',
-      dot: 'bg-[#F5A623]',
+      label: 'REVIEW REQUIRED',
+      icon: '▲',
       styles:
-        'bg-[#F5A62315] text-[#F5A623] border-[#F5A62340] ' +
-        'shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_8px_rgba(245,166,35,0.15)]',
+        'bg-[#18181B] text-[#FAFAFA] border-2 border-[#71717A] ' +
+        'shadow-[inset_0_2px_4px_rgba(0,0,0,0.8),0_1px_0_rgba(255,255,255,0.1)] font-bold',
     },
   };
 
   const config = configs[normalized] ?? {
-    label: status,
-    dot: 'bg-[#1A2F55]',
-    styles: 'bg-[#0C1A35] text-[#7EC8E3] border-[#1A2F55]',
+    label: status.toUpperCase(),
+    icon: '●',
+    styles: 'bg-[#18181B] text-[#A1A1AA] border border-[#3F3F46]',
   };
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold font-display border ${config.styles} ${className}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs uppercase tracking-wider rounded-sm select-none ${config.styles} ${className}`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${config.dot}`} aria-hidden="true" />
-      {config.label}
+      <span className="text-[11px] leading-none" aria-hidden="true">
+        {config.icon}
+      </span>
+      <span>{config.label}</span>
     </span>
   );
 }

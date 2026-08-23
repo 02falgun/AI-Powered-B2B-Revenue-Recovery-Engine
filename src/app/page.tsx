@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import { Logo } from '@/components/Logo';
 import { InvoiceStatusBadge } from '@/components/ui/InvoiceStatusBadge';
 import { UserNav } from '@/components/UserNav';
@@ -19,35 +19,28 @@ interface InvoiceItem {
   readonly dueDate: string;
 }
 
-import type { Variants } from 'framer-motion';
-
 const containerVariants: Variants = {
   hidden: {},
-  visible: { transition: { staggerChildren: 0.06 } },
+  visible: { transition: { staggerChildren: 0.05 } },
 };
 
 const cardVariants: Variants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] } },
-};
-
-const metricVariants: Variants = {
-  hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.25, 0.1, 0.25, 1] } },
+  hidden: { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: 'easeOut' } },
 };
 
 function SkeletonRow() {
   return (
-    <div className="flex items-center gap-4 px-6 py-5 border-b border-[#1A2F5540]">
-      <div className="skeleton h-4 w-24 rounded" />
+    <div className="flex items-center gap-4 px-6 py-4 border-b border-[#26262B]">
+      <div className="h-4 w-24 rounded bg-[#202024] animate-pulse" />
       <div className="flex-1 space-y-1.5">
-        <div className="skeleton h-3.5 w-36 rounded" />
-        <div className="skeleton h-2.5 w-48 rounded" />
+        <div className="h-3.5 w-36 rounded bg-[#202024] animate-pulse" />
+        <div className="h-2.5 w-48 rounded bg-[#18181B] animate-pulse" />
       </div>
-      <div className="skeleton h-4 w-20 rounded" />
-      <div className="skeleton h-7 w-28 rounded-full" />
-      <div className="skeleton h-4 w-16 rounded" />
-      <div className="skeleton h-8 w-28 rounded-xl ml-auto" />
+      <div className="h-4 w-20 rounded bg-[#202024] animate-pulse" />
+      <div className="h-6 w-24 rounded bg-[#202024] animate-pulse" />
+      <div className="h-4 w-16 rounded bg-[#202024] animate-pulse" />
+      <div className="h-8 w-28 rounded bg-[#202024] animate-pulse ml-auto" />
     </div>
   );
 }
@@ -56,14 +49,22 @@ export default function ARDashboardPage() {
   const [invoices, setInvoices] = useState<ReadonlyArray<InvoiceItem>>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalCount, setTotalCount] = useState<number>(0);
 
   useEffect(() => {
     async function fetchInvoices() {
+      setLoading(true);
       try {
-        const res = await fetch('/api/invoices');
+        const res = await fetch(`/api/invoices?page=${page}&limit=5`);
         const data = await res.json();
         if (data.success && Array.isArray(data.invoices)) {
           setInvoices(data.invoices);
+          if (data.pagination) {
+            setTotalPages(data.pagination.totalPages);
+            setTotalCount(data.pagination.total);
+          }
         } else {
           setError(
             data.error?.message ??
@@ -78,7 +79,7 @@ export default function ARDashboardPage() {
     }
 
     fetchInvoices();
-  }, []);
+  }, [page]);
 
   const totalOutstandingINR =
     invoices.reduce((sum, inv) => sum + inv.outstandingAmountPaise, 0) / 100;
@@ -87,153 +88,163 @@ export default function ARDashboardPage() {
   const recoveryCount = invoices.filter((i) => i.status === 'in_recovery').length;
 
   return (
-    <div
-      className="min-h-screen text-slate-50 font-sans"
-      style={{ background: '#060E1F' }}
-    >
-      {/* ── Top Navigation Bar ──────────────────────────────── */}
-      <header className="sticky top-0 z-50 border-b border-[#1A2F55] backdrop-blur-md"
-        style={{ background: 'rgba(6,14,31,0.85)' }}
-      >
+    <div className="min-h-screen text-[#FAFAFA] font-sans bg-[#0D0D0E] texture-chassis">
+      {/* ── Top Industrial Control Header ──────────────────── */}
+      <header className="sticky top-0 z-50 border-b border-[#26262B] bg-[#121214]/90 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
           <Logo scale={1} />
 
           <div className="flex items-center gap-3">
-            {/* Live status indicator */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#1A2F55] bg-[#0C1A35]">
-              <span
-                className="h-1.5 w-1.5 rounded-full bg-[#00C48C]"
-                style={{ animation: 'pulse-ring 2s ease-in-out infinite' }}
-                aria-hidden="true"
-              />
-              <span className="text-[11px] font-mono text-[#7EC8E3]">System Active</span>
+            {/* Telemetry Status Ingot */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded bg-[#18181B] border border-[#2A2A30] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <span className="h-2 w-2 rounded-full bg-[#FAFAFA]" aria-hidden="true" />
+              <span className="text-[11px] font-mono uppercase tracking-wider text-[#D4D4D8]">
+                CORE ACTIVE
+              </span>
             </div>
 
-            {/* Total portfolio counter */}
-            <div className="hidden md:block px-4 py-1.5 rounded-xl border border-[#1A2F55] bg-[#0C1A35] text-right shadow-surface">
-              <span className="text-[10px] text-[#7EC8E360] uppercase tracking-wider font-mono block">
-                Portfolio Debt
+            {/* Recessed Portfolio Debt Gauge */}
+            <div className="hidden md:flex flex-col items-end px-3.5 py-1 rounded panel-recessed">
+              <span className="text-[9px] text-[#71717A] uppercase tracking-widest font-bold">
+                PORTFOLIO DEBT
               </span>
-              <span className="text-sm font-bold font-mono text-[#00C48C]">
+              <span className="text-sm font-black font-mono text-[#FAFAFA]">
                 ₹{totalOutstandingINR.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
             </div>
 
-            {/* Unmatched Queue Navigation Link */}
+            {/* Unmatched Review Link */}
             <Link
               href="/unmatched"
-              className="text-xs font-medium text-[#E5A93C] hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-[#E5A93C40] hover:border-[#E5A93C] bg-[#E5A93C10] flex items-center gap-1.5"
+              className="text-xs font-bold text-[#D4D4D8] hover:text-[#FAFAFA] transition-all px-3 py-1.5 rounded bg-[#1C1C20] hover:bg-[#26262B] border border-[#383840] shadow-[0_1px_2px_rgba(0,0,0,0.5)] active:translate-y-[1px] flex items-center gap-1.5"
             >
-              <span>📬</span> Unmatched Queue
+              <span aria-hidden="true">📬</span> Review Queue
             </Link>
 
-            {/* User Session & Role Indicator */}
+            {/* User Session & Role */}
             <UserNav />
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-10 space-y-8">
-        {/* ── Page Hero ────────────────────────────────────── */}
+      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+        {/* ── Console Header Title ────────────────────────── */}
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold font-display text-white tracking-tight">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono tracking-widest text-[#71717A] uppercase">
+              CONSOLE 01 // MAIN LEDGER
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black text-[#FAFAFA] tracking-tight font-display">
             Accounts Receivable Control Center
           </h1>
-          <p className="text-sm text-[#7EC8E3]">
-            Select an overdue invoice to run AI intent extraction and deterministic policy validation.
+          <p className="text-sm text-[#A1A1AA]">
+            Select an account from the ledger to engage AI intent analysis and deterministic guardrail policy checks.
           </p>
         </div>
 
-        {/* ── Metric Cards ─────────────────────────────────── */}
+        {/* ── 4 Physical Instrument Readout Gauges ──────────── */}
         <motion.div
           variants={containerVariants}
           initial="hidden"
           animate="visible"
           className="grid grid-cols-2 md:grid-cols-4 gap-4"
         >
-          {/* Policy Engine Mode */}
+          {/* Gauge 1: Policy Engine Interlock */}
           <motion.div
-            variants={metricVariants}
-            className="rounded-xl border border-[#1A2F55] p-5 space-y-2 shadow-surface"
-            style={{ background: '#0C1A35' }}
+            variants={cardVariants}
+            className="panel-raised p-4 rounded-xl space-y-3 flex flex-col justify-between"
           >
-            <span className="text-[10px] text-[#7EC8E360] uppercase tracking-wider font-mono block">
-              Policy Engine
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#00C48C]" aria-hidden="true" />
-              <p className="text-sm font-semibold text-[#00C48C] font-display">Deterministic</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#A1A1AA] tracking-tight">
+                Policy Interlock
+              </span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#FAFAFA]" />
             </div>
-            <p className="text-[10px] text-[#1A2F55] font-mono">Invariant Active</p>
+            <div>
+              <p className="text-lg font-bold text-[#FAFAFA] font-display">DETERMINISTIC</p>
+              <p className="text-[11px] text-[#71717A] font-mono mt-0.5">8 Guardrails Active</p>
+            </div>
           </motion.div>
 
-          {/* Guardrail Authority */}
+          {/* Gauge 2: Authority Level */}
           <motion.div
-            variants={metricVariants}
-            className="rounded-xl border border-[#1A2F55] p-5 space-y-2 shadow-surface"
-            style={{ background: '#0C1A35' }}
+            variants={cardVariants}
+            className="panel-raised p-4 rounded-xl space-y-3 flex flex-col justify-between"
           >
-            <span className="text-[10px] text-[#7EC8E360] uppercase tracking-wider font-mono block">
-              AUTO_RECOVER Authority
-            </span>
-            <p className="text-sm font-semibold text-[#3395FF] font-display">Guardrails A–F</p>
-            <p className="text-[10px] text-[#1A2F55] font-mono">lib/policy.ts sole issuer</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#A1A1AA] tracking-tight">
+                Recovery Authority
+              </span>
+              <span className="text-[10px] font-mono font-bold text-[#FAFAFA] px-1.5 py-0.2 rounded bg-[#27272A] border border-[#3F3F46]">
+                AUTO
+              </span>
+            </div>
+            <div>
+              <p className="text-lg font-bold text-[#FAFAFA] font-display">GUARDRAILS A–H</p>
+              <p className="text-[11px] text-[#71717A] font-mono mt-0.5">lib/policy.ts Authority</p>
+            </div>
           </motion.div>
 
-          {/* Overdue count */}
+          {/* Gauge 3: Overdue Accounts */}
           <motion.div
-            variants={metricVariants}
-            className="rounded-xl border border-[#F04E3730] p-5 space-y-2 shadow-surface"
-            style={{ background: '#0C1A35' }}
+            variants={cardVariants}
+            className="panel-raised p-4 rounded-xl space-y-3 flex flex-col justify-between"
           >
-            <span className="text-[10px] text-[#7EC8E360] uppercase tracking-wider font-mono block">
-              Overdue Invoices
-            </span>
-            <p className="text-2xl font-bold font-mono text-[#F04E37]">
-              {loading ? '—' : overdueCount}
-            </p>
-            <p className="text-[10px] text-[#1A2F55] font-mono">Require attention</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#A1A1AA] tracking-tight">
+                Overdue Accounts
+              </span>
+              <span className="text-xs text-[#FAFAFA]" aria-hidden="true">⏱</span>
+            </div>
+            <div>
+              <p className="text-2xl font-black font-mono text-[#FAFAFA]">
+                {loading ? '—' : overdueCount}
+              </p>
+              <p className="text-[11px] text-[#71717A] font-mono mt-0.5">Immediate Focus</p>
+            </div>
           </motion.div>
 
-          {/* In recovery count */}
+          {/* Gauge 4: Active In Recovery */}
           <motion.div
-            variants={metricVariants}
-            className="rounded-xl border border-[#3395FF30] p-5 space-y-2 shadow-surface"
-            style={{ background: '#0C1A35' }}
+            variants={cardVariants}
+            className="panel-raised p-4 rounded-xl space-y-3 flex flex-col justify-between"
           >
-            <span className="text-[10px] text-[#7EC8E360] uppercase tracking-wider font-mono block">
-              In Recovery
-            </span>
-            <p className="text-2xl font-bold font-mono text-[#3395FF]">
-              {loading ? '—' : recoveryCount}
-            </p>
-            <p className="text-[10px] text-[#1A2F55] font-mono">Active pipeline</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#A1A1AA] tracking-tight">
+                Active Pipeline
+              </span>
+              <span className="text-xs text-[#FAFAFA]" aria-hidden="true">⟳</span>
+            </div>
+            <div>
+              <p className="text-2xl font-black font-mono text-[#FAFAFA]">
+                {loading ? '—' : recoveryCount}
+              </p>
+              <p className="text-[11px] text-[#71717A] font-mono mt-0.5">In Engagement</p>
+            </div>
           </motion.div>
         </motion.div>
 
-        {/* ── Invoice Table Card ───────────────────────────── */}
-        <div
-          className="rounded-2xl border border-[#1A2F55] overflow-hidden shadow-floating"
-          style={{ background: '#0C1A35' }}
-        >
-          {/* Table header */}
-          <div className="px-6 py-5 border-b border-[#1A2F55] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-            style={{ background: 'linear-gradient(135deg, #0C1A35 0%, #112040 100%)' }}
-          >
+        {/* ── Main Ledger Chassis ─────────────────────────── */}
+        <div className="panel-raised rounded-xl overflow-hidden">
+          {/* Chassis Header Bar */}
+          <div className="px-6 py-4 border-b border-[#26262B] bg-[#1A1A1E] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-bold text-white font-display">
-                Accounts Receivable Portfolio
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono text-[#71717A] tracking-wider uppercase font-bold">
+                  PORTFOLIO MATRIX
+                </span>
+              </div>
+              <h2 className="text-base font-bold text-[#FAFAFA] font-display">
+                Accounts Receivable Ledger
               </h2>
-              <p className="text-xs text-[#7EC8E360] mt-0.5">
-                Click "Simulate Email" on any invoice to run AI intent extraction and policy validation.
-              </p>
             </div>
-            <span className="self-start sm:self-auto text-xs font-mono bg-[#060E1F] text-[#7EC8E3] px-3 py-1.5 rounded-full border border-[#1A2F55]">
-              {invoices.length} Active
-            </span>
+            <div className="text-xs font-mono px-3 py-1 rounded panel-recessed text-[#D4D4D8]">
+              {totalCount > 0 ? `${totalCount} Registered Invoices` : `${invoices.length} Active Records`}
+            </div>
           </div>
 
-          {/* Table body */}
+          {/* Table Content */}
           {loading ? (
             <div aria-label="Loading invoices" role="status">
               {[...Array(5)].map((_, i) => (
@@ -242,126 +253,83 @@ export default function ARDashboardPage() {
             </div>
           ) : error ? (
             <div className="p-12 text-center space-y-3" role="alert">
-              <div className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-[#F04E3715] border border-[#F04E3740] text-[#F04E37]">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M8 5v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  <circle cx="8" cy="11" r="0.75" fill="currentColor" />
-                </svg>
-                <span className="text-sm font-semibold">Unable to Load Portfolio</span>
+              <div className="inline-flex items-center gap-2 px-4 py-3 rounded bg-[#18181B] border-2 border-[#71717A] text-[#FAFAFA]">
+                <span aria-hidden="true">▲</span>
+                <span className="text-sm font-bold">Ledger Connection Warning</span>
               </div>
-              <p className="text-xs text-[#7EC8E360]">{error}</p>
+              <p className="text-xs text-[#A1A1AA]">{error}</p>
             </div>
           ) : invoices.length === 0 ? (
-            <div className="p-12 text-center text-[#7EC8E360] text-sm">
-              No active invoices found in the accounts receivable database.
+            <div className="p-12 text-center text-[#71717A] text-sm">
+              No active invoice records discovered in this company tenant.
             </div>
           ) : (
             <>
-              {/* Desktop table */}
+              {/* Desktop Table View */}
               <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-left text-sm text-[#C4D4EC]">
+                <table className="w-full text-left text-sm text-[#D4D4D8]">
                   <thead>
-                    <tr className="text-[10px] text-[#7EC8E360] uppercase tracking-wider border-b border-[#1A2F55] font-mono"
-                      style={{ background: '#060E1F60' }}
-                    >
-                      <th className="px-6 py-3.5">Invoice</th>
-                      <th className="px-6 py-3.5">Customer</th>
-                      <th className="px-6 py-3.5">Total Debt</th>
-                      <th className="px-6 py-3.5">Outstanding</th>
-                      <th className="px-6 py-3.5">Status</th>
+                    <tr className="text-[10px] text-[#71717A] uppercase tracking-wider border-b border-[#26262B] bg-[#121214] font-mono">
+                      <th className="px-6 py-3.5">Invoice ID</th>
+                      <th className="px-6 py-3.5">Debtor Entity</th>
+                      <th className="px-6 py-3.5">Original Sum</th>
+                      <th className="px-6 py-3.5">Outstanding Balance</th>
+                      <th className="px-6 py-3.5">State</th>
                       <th className="px-6 py-3.5">Due Date</th>
-                      <th className="px-6 py-3.5 text-right">Action</th>
+                      <th className="px-6 py-3.5 text-right">Operation</th>
                     </tr>
                   </thead>
                   <motion.tbody
                     variants={containerVariants}
                     initial="hidden"
                     animate="visible"
-                    className="divide-y divide-[#1A2F5540]"
+                    className="divide-y divide-[#26262B]"
                   >
                     {invoices.map((inv) => {
                       const outstandingInr = (inv.outstandingAmountPaise / 100).toFixed(2);
                       const totalInr = (inv.totalAmountPaise / 100).toFixed(2);
-                      const isHighValue = inv.outstandingAmountPaise > 50000 * 100;
-                      const isOverdue = inv.status === 'overdue';
 
                       return (
                         <motion.tr
                           key={inv.id}
                           variants={cardVariants}
-                          className="group transition-all duration-200"
-                          style={{ cursor: 'default' }}
-                          onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLTableRowElement).style.background = '#112040';
-                          }}
-                          onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLTableRowElement).style.background = '';
-                          }}
+                          className="hover:bg-[#1E1E22] transition-colors"
                         >
                           <td className="px-6 py-4">
-                            <div className="font-mono font-bold text-white text-sm">
+                            <div className="font-mono font-bold text-[#FAFAFA] text-sm">
                               {inv.invoiceNumber}
                             </div>
-                            <div className="text-[10px] text-[#1A2F55] font-mono mt-0.5">
+                            <div className="text-[10px] text-[#71717A] font-mono mt-0.5">
                               {inv.id.slice(0, 8)}…
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="font-semibold text-white font-display text-sm">
+                            <div className="font-bold text-[#FAFAFA] text-sm">
                               {inv.customerName}
                             </div>
-                            <div className="text-xs text-[#7EC8E360] mt-0.5">{inv.customerEmail}</div>
+                            <div className="text-xs text-[#71717A] mt-0.5">{inv.customerEmail}</div>
                           </td>
-                          <td className="px-6 py-4 font-mono text-[#7EC8E360] text-sm">
+                          <td className="px-6 py-4 font-mono text-[#A1A1AA] text-sm">
                             ₹{totalInr}
                           </td>
                           <td className="px-6 py-4">
-                            <span
-                              className={`font-mono font-bold text-lg ${
-                                isHighValue ? 'text-[#F04E37]' : 'text-[#00C48C]'
-                              }`}
-                              style={
-                                isHighValue
-                                  ? { textShadow: '0 0 12px rgba(240,78,55,0.4)' }
-                                  : isOverdue
-                                    ? {}
-                                    : { textShadow: '0 0 10px rgba(0,196,140,0.3)' }
-                              }
-                            >
+                            <span className="font-mono font-black text-base text-[#FAFAFA]">
                               ₹{outstandingInr}
                             </span>
                           </td>
                           <td className="px-6 py-4">
                             <InvoiceStatusBadge status={inv.status} />
                           </td>
-                          <td className="px-6 py-4 text-xs text-[#7EC8E360] font-mono">
+                          <td className="px-6 py-4 text-xs text-[#A1A1AA] font-mono">
                             {new Date(inv.dueDate).toLocaleDateString('en-IN')}
                           </td>
                           <td className="px-6 py-4 text-right">
                             <Link
                               href={`/invoices/${inv.id}`}
-                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-semibold font-display transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3395FF] motion-safe:hover:-translate-y-px"
-                              style={{
-                                background: '#3395FF',
-                                boxShadow:
-                                  'inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 12px rgba(51,149,255,0.3)',
-                              }}
-                              onMouseEnter={(e) => {
-                                (e.currentTarget as HTMLAnchorElement).style.background = '#1d80f0';
-                                (e.currentTarget as HTMLAnchorElement).style.boxShadow =
-                                  'inset 0 1px 0 rgba(255,255,255,0.15), 0 8px 20px rgba(51,149,255,0.4)';
-                              }}
-                              onMouseLeave={(e) => {
-                                (e.currentTarget as HTMLAnchorElement).style.background = '#3395FF';
-                                (e.currentTarget as HTMLAnchorElement).style.boxShadow =
-                                  'inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 12px rgba(51,149,255,0.3)';
-                              }}
+                              className="btn-mechanical-primary inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded text-xs"
                             >
                               <span>Simulate Email</span>
-                              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                                <path d="M2.5 6h7m-3-3 3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                              </svg>
+                              <span aria-hidden="true">→</span>
                             </Link>
                           </td>
                         </motion.tr>
@@ -371,66 +339,73 @@ export default function ARDashboardPage() {
                 </table>
               </div>
 
-              {/* Mobile card layout */}
-              <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-                className="md:hidden divide-y divide-[#1A2F5540]"
-              >
+              {/* Mobile View */}
+              <div className="md:hidden divide-y divide-[#26262B]">
                 {invoices.map((inv) => {
                   const outstandingInr = (inv.outstandingAmountPaise / 100).toFixed(2);
-                  const isHighValue = inv.outstandingAmountPaise > 50000 * 100;
 
                   return (
-                    <motion.div
-                      key={inv.id}
-                      variants={cardVariants}
-                      className="p-4 space-y-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
+                    <div key={inv.id} className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="font-mono font-bold text-white">{inv.invoiceNumber}</div>
-                          <div className="text-xs text-[#7EC8E360] mt-0.5">{inv.customerName}</div>
+                          <div className="font-mono font-bold text-[#FAFAFA]">{inv.invoiceNumber}</div>
+                          <div className="text-xs text-[#A1A1AA]">{inv.customerName}</div>
                         </div>
                         <InvoiceStatusBadge status={inv.status} />
                       </div>
 
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between pt-1">
                         <div>
-                          <span className="text-[10px] text-[#7EC8E360] font-mono block">Outstanding</span>
-                          <span
-                            className={`text-xl font-bold font-mono ${isHighValue ? 'text-[#F04E37]' : 'text-[#00C48C]'}`}
-                          >
+                          <span className="text-[10px] text-[#71717A] font-bold block uppercase">
+                            Outstanding
+                          </span>
+                          <span className="text-lg font-black font-mono text-[#FAFAFA]">
                             ₹{outstandingInr}
                           </span>
                         </div>
                         <Link
                           href={`/invoices/${inv.id}`}
-                          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-white text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3395FF]"
-                          style={{
-                            background: '#3395FF',
-                            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15)',
-                          }}
+                          className="btn-mechanical-primary inline-flex items-center gap-1 px-3.5 py-1.5 rounded text-xs"
                         >
-                          Simulate
-                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                            <path d="M2.5 6h7m-3-3 3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
+                          Simulate →
                         </Link>
                       </div>
-                    </motion.div>
+                    </div>
                   );
                 })}
-              </motion.div>
+              </div>
+
+              {/* Pagination Controls */}
+              <div className="flex items-center justify-between px-6 py-3.5 border-t border-[#26262B] bg-[#121214] text-xs text-[#A1A1AA]">
+                <div className="font-mono">
+                  Page <span className="font-bold text-[#FAFAFA]">{page}</span> of{' '}
+                  <span className="font-bold text-[#FAFAFA]">{totalPages}</span> ({totalCount} items)
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={page <= 1 || loading}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="btn-mechanical-secondary px-3 py-1.5 rounded text-xs disabled:opacity-40"
+                  >
+                    ← Prev
+                  </button>
+                  <button
+                    disabled={page >= totalPages || loading}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    className="btn-mechanical-secondary px-3 py-1.5 rounded text-xs disabled:opacity-40"
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
             </>
           )}
         </div>
 
-        {/* ── Footer ─────────────────────────────────────── */}
-        <footer className="text-center space-y-1 pb-4">
-          <p className="text-[10px] font-mono text-[#1A2F55]">
-            RecoverAI — Razorpay Buildathon · AI Revenue Recovery Track · HMAC SHA256 Idempotent
+        {/* Footer */}
+        <footer className="text-center py-4 border-t border-[#1E1E22]">
+          <p className="text-[10px] font-mono text-[#52525B] uppercase tracking-wider">
+            RecoverAI Control Center · Razorpay Buildathon · Pure Deterministic Policy
           </p>
         </footer>
       </main>
