@@ -29,6 +29,61 @@ Dataset: 20 pre-labeled synthetic B2B buyer emails (5 partial-payment, 4 full-pa
 
 ---
 
+## 📸 Live System Preview & Visual Walkthrough
+
+Experience the end-to-end user journey, physical control-panel interface, and fail-closed safety interlocks across all core screens:
+
+---
+
+### 1. Edge-to-Edge Portal & System Architecture (`/login`)
+> *Split-view entry portal showcasing the 3-step autonomous pipeline, verified safety metrics, and 1-click Instant Demo Authentication.*
+
+![01. Split Info & Authentication Portal](images-screenshots/01_auth_portal.png)
+
+---
+
+### 2. AR Control Center & Multi-Tenant Ledger Matrix (`/`)
+> *Live portfolio debt overview, overdue invoice tracking, tenant isolation, and direct email simulation triggers.*
+
+![02. Accounts Receivable Ledger Dashboard](images-screenshots/02_ledger_dashboard.png)
+
+---
+
+### 3. Buyer Communication Simulator & Telemetry Console (`/invoices/[id]`)
+> *Interactive simulation deck featuring preset stimuli (Partial Payment 50%, Billing Dispute, Overpayment Attempt) and real-time AI extraction.*
+
+![03. Invoice Simulator & Telemetry Console](images-screenshots/03_invoice_simulator.png)
+
+---
+
+### 4. Dispute Detection & Safe `HUMAN_REVIEW` Fail-Closed Routing
+> *When a billing dispute or price discrepancy is detected, the policy engine unconditionally blocks automated recovery and alerts the operator.*
+
+![04. Dispute Trigger & Human Review Safety Alert](images-screenshots/04_human_review_dispute.png)
+
+---
+
+### 5. Full-Width 8-Switch Annunciator Interlock Rack (Rack-08)
+> *Industrial breaker-panel interlocks displaying real-time state: Passed (`✓ PASS`), Tripped (`▲ TRIP`), and Short-Circuited (`— IDLE`), with direct rationale linkage.*
+
+![05. Annunciator Panel Rack-08 Tripped Interlocks](images-screenshots/05_annunciator_rack.png)
+
+---
+
+### 6. Razorpay Test Mode Direct Checkout Gateway Modal
+> *Seamless payment simulation with explicit Test Mode safety banners and non-settling gateway transactions.*
+
+![06. Razorpay Test Mode Checkout Modal](images-screenshots/06_razorpay_checkout.png)
+
+---
+
+### 7. Unmatched Inbound Mailbox Queue & IMAP Polling Dispatch (`/unmatched`)
+> *Automated scheduled IMAP mailbox ingestion triage with manual invoice linking for unrecognized buyer communications.*
+
+![07. Unmatched Inbound Mailbox Queue](images-screenshots/07_unmatched_inbox_queue.png)
+
+---
+
 ## 🏗️ System Architecture
 
 ```
