@@ -14,7 +14,7 @@
 
 ---
 
-## 📊 Final Evaluation Benchmark Results (Phase 8 Frozen)
+## 📊 Final Evaluation Benchmark Results
 
 | Metric | Measured Value | Target | Status |
 | :--- | :--- | :--- | :--- |
@@ -25,88 +25,105 @@
 | **Dispute Detection Accuracy** | **95.0%** | ≥ 95.0% | ✅ PASS |
 | **Policy Engine Determinism** | **100% Byte-Identical** | 100% | ✅ VERIFIED |
 
-Dataset: 20 pre-labeled synthetic B2B buyer emails (5 partial-payment, 4 full-payment, 4 dispute, 3 extension, 4 ambiguous/adversarial). Ground truth labels written **before** running — no post-hoc bias.
+Dataset: 20 pre-labeled synthetic B2B buyer emails (5 partial-payment, 4 full-payment, 4 dispute, 3 extension, 4 ambiguous/adversarial). Ground truth labels written **before** running — zero post-hoc bias.
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         BUYER EMAIL (Untrusted Text)                │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  FIGURE 1 — AI Extraction Layer (src/lib/ai.ts)                     │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  Google Gemini Structured Output (gemini-3.6-flash)          │   │
-│  │  · System prompt explicitly treats email body as DATA        │   │
-│  │  · AbortController (10s timeout) → fail-closed on timeout    │   │
-│  │  · Output: { intent, promised_amount_inr, promised_date,     │   │
-│  │             dispute_present, confidence, rationale, evidence }│   │
-│  └──────────────────────────┬───────────────────────────────────┘   │
-│                             │                                       │
-│  ┌──────────────────────────▼───────────────────────────────────┐   │
-│  │  Server-Side Sanitizer (src/lib/ai-schema.ts)                │   │
-│  │  · Zod schema validation (treats AI output as untrusted)     │   │
-│  │  · Non-INR currency ambiguity → amount = null                │   │
-│  │  · Malformed percentage (>100%) → amount = null              │   │
-│  │  · Converts INR float → integer paise (no floating-point)    │   │
-│  └──────────────────────────┬───────────────────────────────────┘   │
-└──────────────────────────────┼──────────────────────────────────────┘
-                               │ ExtractedIntent (sanitized)
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  FIGURE 2 — Policy Engine (src/lib/policy.ts)                       │
-│  Pure function — no I/O, no randomness, no wall-clock dependence    │
-│                                                                     │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  [C] Dispute Check → HUMAN_REVIEW if dispute_present = true │    │
-│  │  [E] Input Sanity → HUMAN_REVIEW if malformed/null input    │    │
-│  │  [D] Confidence  → HUMAN_REVIEW if confidence < 0.70       │    │
-│  │  [H] Currency    → HUMAN_REVIEW if non-INR ambiguity        │    │
-│  │  [extension]     → HUMAN_REVIEW if intent = extension       │    │
-│  │  [B] Non-Positive→ HUMAN_REVIEW if amount ≤ 0 paise        │    │
-│  │  [A] Over-Amount → HUMAN_REVIEW if amount > outstanding     │    │
-│  │  [G] Auth Invoice→ DB facts override email text claims      │    │
-│  │  ──────────────────────────────────────────────────────     │    │
-│  │  [F] SOLE AUTHORITY: evaluatePolicy() is the ONLY function  │    │
-│  │       authorized to return decision = AUTO_RECOVER          │    │
-│  └──────────────────────────────────────────────────────────   │    │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-               ┌───────────────┴───────────────┐
-               │ AUTO_RECOVER                  │ HUMAN_REVIEW
-               ▼                               ▼
-  ┌──────────────────────┐         ┌─────────────────────────────┐
-  │  Razorpay Payment    │         │  Operator AR Dashboard      │
-  │  Link (API)          │         │  Guardrail Breakdown Card   │
-  │  + Standard Checkout │         │  Audit Timeline             │
-  └──────────┬───────────┘         └─────────────────────────────┘
-             │ Payment completed
-             ▼
-  ┌──────────────────────┐
-  │  Razorpay Webhook    │
-  │  HMAC SHA256 Verify  │
-  │  Idempotent Balance  │
-  │  Update (DB)         │
-  └──────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    BUYER EMAIL INGESTION CHANNELS                       │
+│       [1] IMAP Scheduled Inbox Polling / Vercel Cron                    │
+│       [2] Real-Time Manual Simulation Workspace                         │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  INVOICE MATCHER & ASYNC QUEUE (src/lib/invoice-matcher.ts)             │
+│  · High Confidence: Explicit Invoice Number match (INV-YYYY-XXX)        │
+│  · Medium Confidence: Unique debtor email on active overdue balance     │
+│  · Ambiguous / Unrecognized → Routed to "Unmatched" Review Queue        │
+│  · Table-Backed Queue: public.ingested_email_jobs                       │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  FIGURE 1 — AI Extraction Layer (src/lib/ai.ts)                         │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │  Google Gemini Structured Output (gemini-3.6-flash)              │   │
+│  │  · Bounded Retry Engine: Exponential backoff + randomized jitter │   │
+│  │  · Upstash Rate Limiting: 20 req/hr per user, 60 req/min global  │   │
+│  │  · Maximum payload size validation (≤ 10,000 characters)         │   │
+│  │  · AbortController (10s timeout) → fail-closed on timeout        │   │
+│  │  · Output: { intent, promised_amount_inr, promised_date,         │   │
+│  │             dispute_present, confidence, rationale, evidence }    │   │
+│  └──────────────────────────────┬───────────────────────────────────┘   │
+│                                 │                                       │
+│  ┌──────────────────────────────▼───────────────────────────────────┐   │
+│  │  Server-Side Sanitizer (src/lib/ai-schema.ts)                    │   │
+│  │  · Zod schema validation (treats AI output as untrusted)         │   │
+│  │  · Non-INR currency ambiguity → amount = null                    │   │
+│  │  · Malformed percentage (>100%) → amount = null                  │   │
+│  │  · Converts INR float → integer paise (no floating-point)        │   │
+│  └──────────────────────────────┬───────────────────────────────────┘   │
+└──────────────────────────────────┼──────────────────────────────────────┘
+                                   │ ExtractedIntent (sanitized)
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  FIGURE 2 — Policy Engine (src/lib/policy.ts)                           │
+│  Pure function — no I/O, no retries, no randomness, no wall-clock       │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  [C] Dispute Check → HUMAN_REVIEW if dispute_present = true     │    │
+│  │  [E] Input Sanity → HUMAN_REVIEW if malformed/null input        │    │
+│  │  [D] Confidence  → HUMAN_REVIEW if confidence < 0.70           │    │
+│  │  [H] Currency    → HUMAN_REVIEW if non-INR ambiguity            │    │
+│  │  [extension]     → HUMAN_REVIEW if intent = extension           │    │
+│  │  [B] Non-Positive→ HUMAN_REVIEW if amount ≤ 0 paise            │    │
+│  │  [A] Over-Amount → HUMAN_REVIEW if amount > outstanding         │    │
+│  │  [G] Auth Invoice→ DB facts override email text claims          │    │
+│  │  ──────────────────────────────────────────────────────────     │    │
+│  │  [F] SOLE AUTHORITY: evaluatePolicy() is the ONLY function      │    │
+│  │       authorized to return decision = AUTO_RECOVER              │    │
+│  └──────────────────────────────────────────────────────────────   │    │
+└──────────────────────────────────┬──────────────────────────────────────┘
+                                   │
+                   ┌───────────────┴───────────────┐
+                   │ AUTO_RECOVER                  │ HUMAN_REVIEW
+                   ▼                               ▼
+      ┌──────────────────────┐         ┌─────────────────────────────┐
+      │  Razorpay Payment    │         │  Operator AR Dashboard      │
+      │  Link (API)          │         │  Admin Manual Override Mode │
+      │  + Standard Checkout │         │  Guardrail Breakdown Card   │
+      └──────────┬───────────┘         │  Audit Timeline & Unmatched │
+                 │ Payment completed   └─────────────────────────────┘
+                 ▼
+      ┌──────────────────────┐
+      │  Razorpay Webhook    │
+      │  HMAC SHA256 Verify  │
+      │  Idempotent Balance  │
+      │  Update (DB)         │
+      └──────────────────────┘
 ```
 
 ---
 
 ## 🚀 Tech Stack
 
-| Component | Technology |
-| :--- | :--- |
-| Framework | Next.js 15 App Router (`src/` directory) |
-| Language | TypeScript (Strict Mode: `noImplicitAny`, `strictNullChecks`) |
-| AI & Extraction | Google Gemini API (`@google/genai` SDK, `gemini-3.6-flash`) |
-| Database | Supabase PostgreSQL with `@supabase/ssr` helpers |
-| Payment Gateway | Razorpay (Payment Links API + Standard Web Checkout) |
-| Validation | Zod schema validation on every AI-extracted field |
-| Testing | 8-phase test suite (unit, integration, adversarial, evaluation) |
+| Component | Technology | Description |
+| :--- | :--- | :--- |
+| **Framework** | Next.js 16 (Turbopack) | Modern React 19 App Router with Proxy middleware |
+| **Language** | TypeScript (Strict Mode) | Zero implicit any, strict null checks |
+| **Authentication & RBAC** | Supabase Auth (`@supabase/ssr`) | Secure cookie sessions with `admin` and `operator` roles |
+| **Rate Limiting** | Upstash Redis (`@upstash/ratelimit`) | Sliding-window per-user & global backstop protection |
+| **Reliability & Retries** | Custom Retry Engine | Exponential backoff + randomized jitter with transient error filter |
+| **Email Ingestion & Queue** | IMAP TLS / Vercel Cron | Automated scheduled polling + `ingested_email_jobs` queue table |
+| **AI & Extraction** | Google Gemini API (`@google/genai`) | `gemini-3.6-flash` Structured Output with OpenAI fallback |
+| **Database & ORM** | Supabase PostgreSQL | Additive migrations with Row-Level Security (RLS) |
+| **Payment Gateway** | Razorpay | Payment Links API + Standard Checkout Modal + HMAC Webhooks |
+| **Validation** | Zod | Runtime schema validation on every payload and AI output |
+| **Styling & UI** | TailwindCSS + Framer Motion | Dark mode glassmorphism design system with responsive tokens |
 
 ---
 
@@ -115,43 +132,76 @@ Dataset: 20 pre-labeled synthetic B2B buyer emails (5 partial-payment, 4 full-pa
 ```
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx                      # Invoices AR Dashboard
-│   │   ├── invoices/[id]/page.tsx        # Email Simulator + Decision Result + Audit Trail
+│   │   ├── page.tsx                      # AR Dashboard (Metrics, Active Invoices, Quick Actions)
+│   │   ├── login/page.tsx                # Glassmorphism Login UI (Email/Password & Quick Demos)
+│   │   ├── signup/page.tsx               # Account Registration with Role Selection
+│   │   ├── unmatched/page.tsx            # Unmatched Buyer Email Review & Assignment Queue
+│   │   ├── invoices/[id]/page.tsx        # Email Simulator + Decision Result + Admin Override + Audit Trail
+│   │   ├── auth/callback/route.ts        # Supabase Auth code exchange
 │   │   └── api/
-│   │       ├── process-email/route.ts    # Core Orchestration API endpoint
+│   │       ├── auth/                     # Auth status (/api/auth/me) & Logout (/api/auth/logout)
+│   │       ├── cron/                     # Vercel Cron jobs: /ingest-emails & /process-queue
+│   │       ├── unmatched-emails/         # Unmatched queue GET & link POST endpoints
+│   │       ├── process-email/route.ts    # Rate-limited Core Orchestration API endpoint
 │   │       ├── create-order/route.ts     # Razorpay Order creation (Standard Checkout)
 │   │       ├── verify-payment/route.ts   # Payment signature verification
-│   │       ├── invoices/                 # Invoice list + detail GET routes
-│   │       └── webhook/razorpay/         # Webhook route (HMAC verified, idempotent)
+│   │       ├── invoices/                 # Invoice list + detail + admin override routes
+│   │       └── webhook/razorpay/         # Webhook route (HMAC verified, session-exempt, idempotent)
 │   ├── components/
+│   │   ├── UserNav.tsx                   # Top navigation user pill, role badge & logout
+│   │   ├── Logo.tsx                      # RecoverAI SVG brand icon & wordmark
 │   │   ├── RazorpayCheckoutButton.tsx    # Reusable Standard Checkout modal component
 │   │   └── ui/
 │   │       ├── PolicyGuardrailBreakdown.tsx  # Visual Guardrails A-H status card
 │   │       └── AuditTimeline.tsx             # Timestamped audit events timeline
+│   ├── proxy.ts                          # Next.js 16 Proxy Middleware (Session & Route Gatekeeping)
 │   └── lib/
-│       ├── types.ts                      # Domain types + Result<T, E> error pattern
-│       ├── db.ts                         # Supabase DB helper + idempotency store
+│       ├── types.ts                      # Domain types, Role models, and Result<T, E> pattern
+│       ├── db.ts                         # Supabase DB client, user profiles, and queue store
+│       ├── auth.ts                       # Server-side auth helpers (requireAuth, requireAdmin)
+│       ├── ratelimit.ts                  # Upstash Redis sliding window & memory fallback
+│       ├── retry.ts                      # Resilient exponential backoff retry helper
+│       ├── invoice-matcher.ts            # Heuristic high/medium confidence invoice matching
+│       ├── email-ingestion.ts            # IMAP connector & sample inbox polling
+│       ├── queue-worker.ts               # Background queue worker (pure pipeline execution)
 │       ├── ai-prompt.ts                  # System prompt + prompt injection defenses
 │       ├── ai-schema.ts                  # Zod schema + server-side sanitizer
-│       ├── ai.ts                         # Gemini extraction + offline fallback
-│       ├── policy.ts                     # Policy Engine (Guardrails A-H, sole AUTO_RECOVER)
-│       ├── razorpay.ts                   # Payment link creation helper
+│       ├── ai.ts                         # Gemini extraction with bounded retries & timeout
+│       ├── policy.ts                     # Pure Policy Engine (Guardrails A-H, sole AUTO_RECOVER authority)
+│       ├── razorpay.ts                   # Payment link creation with bounded retries
 │       └── razorpay-webhook.ts           # Pure HMAC SHA256 verification
+├── scripts/
+│   ├── test-phase1-auth.ts               # Phase P1 Authentication & RBAC test suite
+│   ├── test-phase2-ratelimit.ts          # Phase P2 Rate Limiting & Size Boundary test suite
+│   ├── test-phase3-retry.ts              # Phase P3 Retry & Transient Error test suite
+│   ├── test-phase4-ingestion.ts          # Phase P4 Email Ingestion & Queue test suite
+│   ├── test-webhook.ts                   # Webhook signature verification tests
+│   ├── test-razorpay.ts                  # Payment link creation tests
+│   ├── test-extraction.ts                # AI intent extraction tests
+│   ├── test-policy.ts                    # Policy Engine matrix tests
+│   ├── test-orchestration.ts             # Core end-to-end orchestration tests
+│   ├── test-razorpay-checkout.ts         # Checkout modal integration tests
+│   └── run-evaluation.ts                 # 20-case formal benchmark runner
 ├── tests/
-│   ├── unit/policy.test.ts               # Policy Decision Matrix + boundary tests
 │   ├── integration/
 │   │   ├── phase4-reliability.test.ts         # 5-scenario negative reliability suite
 │   │   ├── phase6-adversarial.test.ts         # 7-scenario adversarial suite
-│   │   └── dual-payment-idempotency.test.ts   # Task 3: both payment paths = one balance update
+│   │   └── dual-payment-idempotency.test.ts   # Dual payment path idempotency test
 │   └── evaluation/dataset.ts            # 20 pre-labeled benchmark fixtures
 ├── supabase/
-│   ├── schema.sql                        # DDL: invoices, audit_logs, processed_payments
-│   └── seed.sql                          # 5 overdue invoices seed data
+│   ├── schema.sql                        # Complete DDL: invoices, user_profiles, jobs, audit_logs
+│   ├── seed.sql                          # Overdue invoices test dataset
+│   └── migrations/                       # Additive SQL migrations
+│       ├── 20260822000000_create_user_profiles.sql
+│       └── 20260822000001_create_ingested_email_jobs.sql
+├── vercel.json                           # Vercel Cron jobs configuration
 └── docs/
+    ├── design-system.md                  # Complete visual tokens, colors, and layout specs
     ├── demo-script.md                    # 3-minute live demo script
     ├── judge-qa-prep.md                  # Technical judge Q&A with metric citations
     ├── phase6-adversarial-defenses.md   # Adversarial attack & defense report
-    └── evaluation-report.md             # Formal Phase 7 benchmark report
+    ├── evaluation-report.md             # Formal Phase 7 benchmark report
+    └── submission-readiness-report.md    # Pre-submission verification audit
 ```
 
 ---
@@ -160,9 +210,10 @@ Dataset: 20 pre-labeled synthetic B2B buyer emails (5 partial-payment, 4 full-pa
 
 ### Prerequisites
 - Node.js ≥ 18, npm ≥ 9
-- Supabase project (free tier is sufficient)
+- Supabase project (Free tier)
+- Upstash Redis database (Free tier)
 - Razorpay Test Mode account
-- Google Gemini API key (free tier available at [ai.google.dev](https://ai.google.dev))
+- Google Gemini API key (Free tier available at [ai.google.dev](https://ai.google.dev))
 
 ### 1. Clone & Install
 ```bash
@@ -179,8 +230,6 @@ cp .env.example .env.local
 Edit `.env.local`:
 ```env
 # Supabase Configuration
-# The project URL is non-sensitive (public). The anon/publishable key is NOT used
-# — all DB access goes through server-side routes using the service-role key only.
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
@@ -188,190 +237,130 @@ SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 GEMINI_API_KEY=your-gemini-api-key
 
 # Razorpay (Test Mode)
-# KEY_ID is public-safe and is sent to the browser only for the checkout modal.
 RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxx
 RAZORPAY_KEY_SECRET=your-razorpay-key-secret
 NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxx
 RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
+
+# Upstash Redis & Rate Limiting (Free Tier)
+UPSTASH_REDIS_REST_URL=https://your-upstash-redis.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your-upstash-redis-rest-token
+RATE_LIMIT_USER_MAX=20
+RATE_LIMIT_USER_WINDOW_MS=3600000
+RATE_LIMIT_GLOBAL_MAX=60
+RATE_LIMIT_GLOBAL_WINDOW_MS=60000
+MAX_EMAIL_BODY_CHARS=10000
+
+# Vercel Cron Secret (Optional)
+CRON_SECRET=your-cron-secret
 ```
 
 ### 3. Set Up Supabase Database
 1. Open Supabase Dashboard → SQL Editor
-2. Run `supabase/schema.sql` (creates `invoices`, `audit_logs`, `processed_payments` tables)
-3. Run `supabase/seed.sql` (seeds 5 realistic overdue invoices with integer paise amounts)
+2. Run `supabase/schema.sql` (creates `invoices`, `user_profiles`, `ingested_email_jobs`, `audit_logs`, `processed_payments` tables + RLS + trigger)
+3. Run `supabase/seed.sql` (seeds overdue invoices with integer paise amounts)
 
 ### 4. Set Up Razorpay Test Mode
-1. Create account at [dashboard.razorpay.com](https://dashboard.razorpay.com)
-2. Switch to **Test Mode** in the dashboard toggle
-3. Navigate to Settings → API Keys → Generate Test Key
-4. For webhook testing: Settings → Webhooks → Add webhook URL (`/api/webhook/razorpay`)
-   - Enable BOTH events: **`payment_link.paid`** (Payment Links flow) and **`payment.captured`** (Standard Checkout flow)
-   - The webhook handler accepts and processes both events
-5. Copy the webhook secret to `RAZORPAY_WEBHOOK_SECRET` in `.env.local`
-
-**Test Credentials:**
-- Card: `4100 2800 0000 1007` · CVV: `123` · Expiry: `12/26`
-- UPI: `test@razorpay`
+1. Create account at [dashboard.razorpay.com](https://dashboard.razorpay.com) and switch to **Test Mode**.
+2. Navigate to Settings → API Keys → Generate Test Key.
+3. Settings → Webhooks → Add webhook URL (`/api/webhook/razorpay`).
+   - Enable events: `payment_link.paid` and `payment.captured`.
+4. Copy the webhook secret to `RAZORPAY_WEBHOOK_SECRET` in `.env.local`.
 
 ### 5. Start Development Server
 ```bash
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000)
+Open [http://localhost:3000](http://localhost:3000) (Redirects to `/login`).  
+*Quick-fill demo buttons are provided on the login page for instant Admin or Operator sign-in.*
 
 ---
 
-## 🧪 Running Tests
+## 🧪 Automated Testing
+
+RecoverAI includes a complete 14-suite automated verification harness:
 
 ```bash
-# Full test suite (all 8 phases)
+# Run the entire test suite end-to-end
 npm run test
 
-# Individual suites
-npm run test:policy        # Policy Decision Matrix (15/15)
-npm run test:phase4        # Reliability & Idempotency (5/5)
-npm run test:phase6        # Adversarial Integration (12/12)
-npm run test:eval          # Phase 7 Benchmark (20 cases, 100% accuracy)
-npm run test:idempotency   # Dual-path idempotency (same payment_id → one balance update)
-npm run demo:rehearse      # Live demo rehearsal (runs twice, verifies determinism)
+# Production-Hardening Specific Suites
+npm run test:phase1            # Phase P1: Auth, RBAC & Middleware Gatekeeping
+npm run test:phase2            # Phase P2: Upstash Rate Limiting & Size Limits
+npm run test:phase3            # Phase P3: Exponential Backoff & Transient Retries
+npm run test:phase4-ingestion  # Phase P4: IMAP Ingestion, Matching & Queue Worker
+
+# Core Engine Suites
+npm run test:policy            # Pure Policy Engine Matrix (15/15)
+npm run test:webhook           # Razorpay HMAC Signature Verification (5/5)
+npm run test:razorpay          # Razorpay Payment Link Generation (4/4)
+npm run test:ai                # Gemini Intent Extraction & Fail-Closed Guards (10/10)
+npm run test:orchestration     # Core End-to-End Orchestration Loop
+npm run test:checkout          # Standard Web Checkout Modal Integration (5/5)
+npm run test:phase4            # Negative Reliability & Timeout Suite (5/5)
+npm run test:phase5            # UI State & Component Regression Tests
+npm run test:phase6            # Adversarial Prompt Injection Attacks (8/8)
+npm run test:eval              # Phase 7 AI Benchmark (20/20 cases, 100% safety)
+npm run test:idempotency       # Dual-path payment idempotency verification
+npm run demo:rehearse          # Live demo rehearsal runner (determinism check)
 ```
-
----
-
-## 🤖 Structured Output Schema
-
-The AI extraction schema sent to Gemini Structured Output:
-
-```json
-{
-  "type": "OBJECT",
-  "properties": {
-    "intent": {
-      "type": "STRING",
-      "enum": ["full_payment", "partial_payment", "dispute", "extension", "unknown"]
-    },
-    "promised_amount_inr": { "type": "NUMBER", "nullable": true },
-    "promised_date":       { "type": "STRING", "nullable": true },
-    "dispute_present":     { "type": "BOOLEAN" },
-    "confidence":          { "type": "NUMBER" },
-    "rationale":           { "type": "STRING" },
-    "evidence":            { "type": "STRING" }
-  },
-  "required": ["intent", "dispute_present", "confidence", "rationale", "evidence"]
-}
-```
-
-All fields are re-validated server-side by Zod before reaching the policy engine.
 
 ---
 
 ## 🛡️ Policy Guardrails (A–H)
 
-`evaluatePolicy()` in `src/lib/policy.ts` is the **sole function authorized to emit `AUTO_RECOVER`**. It applies 8 named guardrails in order:
+`evaluatePolicy()` in `src/lib/policy.ts` is the **single authority permitted to return `AUTO_RECOVER`**:
 
-| Guardrail | Trigger | Result |
-| :--- | :--- | :--- |
-| **A — Over-Amount** | Proposed paise > Outstanding paise | `HUMAN_REVIEW` |
-| **B — Non-Positive Amount** | Proposed paise ≤ 0 | `HUMAN_REVIEW` |
-| **C — Dispute** | `dispute_present = true` OR `intent = dispute` | `HUMAN_REVIEW` |
-| **D — Low Confidence** | `confidence < 0.70` | `HUMAN_REVIEW` |
-| **E — Input Sanity** | Malformed/null extraction object | `HUMAN_REVIEW` |
-| **F — Sole Authority** | Architecture invariant — no other code path reaches `AUTO_RECOVER` | (structural) |
-| **G — Authoritative Invoice** | DB-sourced invoice facts override email text claims | (structural) |
-| **H — Currency Ambiguity** | Non-INR currency detected (`USD`, `EUR`, `$`) or percentage > 100% | `HUMAN_REVIEW` |
-
-> **Note on structural security controls:** Two additional safeguards are enforced outside the 8-guardrail policy list — they are architectural invariants, not runtime guardrails:
-> - **Webhook Signature Verification**: `verifyRazorpayWebhookSignature()` (HMAC SHA256 + `crypto.timingSafeEqual`) runs on every webhook event **before** any DB access. This is a transport-layer security control, not a policy guardrail.
-> - **AI-Failure Fail-Closed**: When `extractPaymentIntent()` times out (>10s) or returns malformed output, the orchestrator returns `{ ok: false }` and routes to `HUMAN_REVIEW` before `evaluatePolicy()` is ever called. This is handled at the orchestration layer.
-
----
-
-## 📊 Phase 7 Evaluation Dataset Summary
-
-20 pre-labeled synthetic email fixtures across 5 categories:
-
-| Category | Count | Expected Decision | Phase 7 Result |
+| Guardrail | Trigger Condition | Decision | Rationale |
 | :--- | :--- | :--- | :--- |
-| Partial Payment | 5 | 4× AUTO_RECOVER, 1× HUMAN_REVIEW | ✅ 5/5 |
-| Full Payment | 4 | 4× AUTO_RECOVER | ✅ 4/4 |
-| Dispute | 4 | 4× HUMAN_REVIEW | ✅ 4/4 |
-| Extension | 3 | 3× HUMAN_REVIEW | ✅ 3/3 |
-| Ambiguous / Adversarial | 4 | 4× HUMAN_REVIEW | ✅ 4/4 |
-| **Total** | **20** | | **20/20 ✅** |
-
-Full evaluation report: [`docs/evaluation-report.md`](docs/evaluation-report.md)
-
----
-
-## ⚠️ Known Limitations (PRD 3.5 Non-Goals)
-
-These items are known gaps explicitly deferred, not forgotten:
-
-1. **Multi-Currency FX Conversion**: Non-INR amounts are blocked by Guardrail H and routed to human review. FX conversion at dynamic rates is not implemented.
-2. **Bulk / Queue Processing**: Current design is one invoice per API call. A message queue (e.g., BullMQ or Supabase Realtime) for batch processing is a Phase 10 item.
-3. **Authentication / RBAC**: No login system in the current build. The AR Dashboard runs in open-access demo mode. Auth is deferred.
-4. **Retry with Exponential Backoff**: Gemini API errors fall back to the offline mock extractor. Configurable retry-with-backoff is not implemented.
-5. **External SIEM / Audit Log Forwarding**: Audit logs are written to Supabase only. Integration with external SIEM systems is deferred.
-6. **Email Inbox Integration**: The system currently requires manual email paste. Direct inbox polling (Gmail API, IMAP) is not in scope.
+| **A — Over-Amount** | Promised paise > Outstanding paise | `HUMAN_REVIEW` | Prevents overcharging or arithmetic mismatch |
+| **B — Non-Positive Amount** | Promised paise ≤ 0 | `HUMAN_REVIEW` | Blocks zero or negative payment attempts |
+| **C — Dispute Detection** | `dispute_present = true` OR `intent = dispute` | `HUMAN_REVIEW` | **Unconditional**: disputed invoices must never auto-recover |
+| **D — Low Confidence** | Extraction confidence < 0.70 | `HUMAN_REVIEW` | Ambiguous AI extractions require operator verification |
+| **E — Input Sanity** | Malformed or null extraction object | `HUMAN_REVIEW` | Fails closed on any schema aberration |
+| **F — Sole Authority** | Architecture invariant | (structural) | No other code path is authorized to emit `AUTO_RECOVER` |
+| **G — Authoritative Invoice** | DB-sourced invoice facts override text | (structural) | DB balance is source of truth against buyer claims |
+| **H — Currency Ambiguity** | Non-INR currency or percentage > 100% | `HUMAN_REVIEW` | Prevents FX loss and percentage confusion |
 
 ---
 
-## 🗺️ Product Roadmap (PRD 3.13)
+## 🔐 Security & Reliability Invariants
 
-| Phase | Feature |
-| :--- | :--- |
-| v1.1 | Gmail / IMAP inbox polling for zero-touch processing |
-| v1.2 | Auth & RBAC (SSO for AR team login) |
-| v1.3 | Multi-currency support with configurable FX rate source |
-| v1.4 | Bulk queue processing (BullMQ / pg_cron) |
-| v1.5 | Predictive payment probability scoring per debtor |
-| v2.0 | Multi-tenant SaaS with per-organization policy configuration |
-
----
-
-## 🔐 Security Notes
-
-**Secrets handling:**
-- The Supabase anon/publishable key is **not used** — all DB access routes through server-side API handlers using `SUPABASE_SERVICE_ROLE_KEY` only. No anon key is present in `NEXT_PUBLIC_` variables or the client bundle.
-- `NEXT_PUBLIC_SUPABASE_URL` is non-sensitive (a public project URL). `SUPABASE_SERVICE_ROLE_KEY`, `RAZORPAY_KEY_SECRET`, `GEMINI_API_KEY`, and `RAZORPAY_WEBHOOK_SECRET` are server-only and never appear in client code or log lines.
-- `.env.local` is in `.gitignore`; verified never committed (`git log --all --full-history -- .env.local` returns empty).
-- Razorpay `KEY_SECRET` is server-only; only `NEXT_PUBLIC_RAZORPAY_KEY_ID` (the public key ID) is exposed to the browser for the Standard Checkout modal — this is safe per Razorpay's documentation.
-- RLS: Supabase Row Level Security is not enabled on these tables, because the anon/publishable key is not issued or used. The sole access credential is the service-role key, which is held exclusively server-side.
-
-**Dual Payment Flow & Idempotency:**
-- RecoverAI implements two complementary payment flows: **Payment Links** (auto-issued by `process-email` on `AUTO_RECOVER`) and **Standard Checkout** (the modal button). Both are intentional and serve different UX moments.
-- Both flows converge on `updateInvoiceAfterPayment()` in `src/lib/db.ts`, which calls `isPaymentAlreadyProcessed()` as its first step using `razorpay_payment_id` as the key.
-- **Double-credit is architecturally impossible**: if both flows fire for the same `payment_id`, the second call is a verified idempotent no-op. Verified by `npm run test:idempotency`.
-- The webhook handler accepts both `payment_link.paid` and `payment.captured` events — subscribe to both in the Razorpay dashboard.
-
-**Webhook verification:**
-- `verifyRazorpayWebhookSignature()` in `src/lib/razorpay-webhook.ts` uses `crypto.createHmac('sha256')` + `crypto.timingSafeEqual()` on every webhook event
-- The database is never touched before signature verification passes
-- Duplicate webhook replay protection via `processed_payments.payment_id` unique constraint (idempotent — invoice balance updated exactly once per payment)
-
-**AI output isolation:**
-- Every field extracted from Gemini (`gemini-3.6-flash`) is re-validated through Zod before policy evaluation
-- The system prompt (`src/lib/ai-prompt.ts`) explicitly instructs the model that the email body is untrusted `DATA`, never commands
-- `evaluatePolicy()` does not read `rationale` or `evidence` fields for decision logic — injected text in those fields has zero effect on money movement decisions
+1. **Frozen Core Policy Protection**:
+   - `evaluatePolicy()` in `src/lib/policy.ts` has **zero I/O, zero retries, and zero randomness**. All recovery decisions flow through deterministic guardrails.
+2. **Webhook Session Exemption & HMAC Verification**:
+   - The Razorpay webhook `/api/webhook/razorpay` is **always reachable without user session cookies** and is governed strictly by HMAC SHA256 timing-safe signature verification (`verifyRazorpayWebhookSignature`).
+3. **Sliding-Window Abuse Prevention**:
+   - The AI processing endpoint `/api/process-email` is rate-limited per user (20 requests/hr) with a global backstop (60 requests/min).
+   - Email payloads exceeding 10,000 characters are rejected with HTTP 400 before reaching the AI model.
+4. **Resilient Retry Bounds**:
+   - Transient I/O errors (timeouts, 5xx server drops, connection resets) retry up to 2 times with exponential backoff and randomized jitter.
+   - Non-transient errors (4xx validation errors, malformed input) fail immediately without retry. Exhausted retries fail closed to `HUMAN_REVIEW`.
+5. **Fail-Closed Unmatched Review Queue**:
+   - If incoming buyer emails cannot be matched to an invoice with high/medium confidence, they are routed to `/unmatched` rather than guessing.
+6. **Dual Payment Flow Idempotency**:
+   - Payment Links and Standard Checkout both converge on `updateInvoiceAfterPayment()`, where `processed_payments` table ensures duplicate webhooks or dual submissions are idempotent no-ops.
 
 ---
 
 ## 📌 Phase Milestone Summary
 
-- [x] **Phase 0** — Foundation: Next.js 15, Strict TypeScript, Supabase DDL, Razorpay helpers, HMAC webhook
+- [x] **Phase 0** — Foundation: Strict TypeScript, Supabase DDL, Razorpay client, HMAC webhook
 - [x] **Phase 1** — AI Extraction: Gemini Structured Output, prompt injection defenses, Zod validation
 - [x] **Phase 2** — Policy Engine: Guardrails A-F, integer paise arithmetic, 15/15 unit tests
-- [x] **Razorpay Checkout** — Standard Web Checkout modal + order creation + signature verification
 - [x] **Phase 3** — Orchestration Loop: `/api/process-email`, Razorpay link generation, webhook handler
 - [x] **Phase 4** — Reliability: Webhook replay idempotency, 10s timeout, 5/5 negative scenarios
 - [x] **Phase 5** — Dashboard UI: AR Dashboard, Email Simulator, Decision Result, Audit Timeline
 - [x] **Phase 6** — Adversarial Hardening: Guardrails G-H, currency/percentage sanitizers, 12/12 adversarial tests
 - [x] **Phase 7** — Evaluation Harness: 20 pre-labeled benchmarks, 100% Safety Metric, determinism verified
-- [x] **Phase 8** — Fix & Freeze: Fail-closed timeout fix, CHANGELOG, tagged `v1.0.0-frozen`
-- [x] **Phase 9** — Demo Preparation: Demo script, judge Q&A prep, rehearsal runner
+- [x] **Phase 8** — Fix & Freeze: Fail-closed timeout fix, tagged `v1.0.0-frozen`
+- [x] **Phase P1 (Hardening)** — Supabase Auth, `user_profiles`, Proxy Middleware, RBAC (`admin` vs `operator`)
+- [x] **Phase P2 (Hardening)** — Upstash Redis Sliding-Window Rate Limiter & Email Size Boundary
+- [x] **Phase P3 (Hardening)** — Exponential Backoff + Jitter Retry Engine (`src/lib/retry.ts`)
+- [x] **Phase P4 (Hardening)** — IMAP Ingestion Connector, Invoice Matcher, Table Queue Worker, `/unmatched` UI
 
 ---
 
 **Live Demo & Submission Docs:** [`docs/demo-script.md`](docs/demo-script.md) | [`docs/judge-qa-prep.md`](docs/judge-qa-prep.md)  
 **Evaluation Report:** [`docs/evaluation-report.md`](docs/evaluation-report.md)  
-**Frozen Release:** `v1.0.0-frozen`
+**Design Tokens & System:** [`docs/design-system.md`](docs/design-system.md)
