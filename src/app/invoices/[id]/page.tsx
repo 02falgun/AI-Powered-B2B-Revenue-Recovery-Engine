@@ -506,10 +506,15 @@ export default function InvoiceSimulatorPage({ params }: { params: Promise<{ id:
                   {/* Payment Link Generated or Human Review Notification */}
                   {result.decision === 'AUTO_RECOVER' && result.paymentLinkUrl ? (
                     <div className="panel-raised rounded-xl p-5 space-y-4 border border-[#52525B]">
-                      <div className="flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-[#FAFAFA]" aria-hidden="true" />
-                        <span className="text-sm font-bold text-[#FAFAFA]">
-                          Payment Link Issued
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-[#FAFAFA]" aria-hidden="true" />
+                          <span className="text-sm font-bold text-[#FAFAFA]">
+                            Payment Link Issued
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#202024] border border-[#52525B] text-[#FAFAFA] font-bold">
+                          ⚡ TEST MODE LINK
                         </span>
                       </div>
                       <p className="text-xs text-[#A1A1AA] font-mono">
@@ -524,6 +529,9 @@ export default function InvoiceSimulatorPage({ params }: { params: Promise<{ id:
                         <span>Open Razorpay Test Payment Link</span>
                         <span aria-hidden="true">→</span>
                       </a>
+                      <div className="text-[10px] font-mono text-center text-[#71717A] pt-1">
+                        Test Mode Only — Non-settling transaction simulation
+                      </div>
                     </div>
                   ) : (
                     <div className="panel-raised rounded-xl p-5 space-y-4 border-2 border-[#71717A]" role="alert">

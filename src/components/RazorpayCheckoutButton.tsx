@@ -194,6 +194,11 @@ export function RazorpayCheckoutButton({
         )}
       </button>
 
+      <div className="flex items-center justify-center gap-1.5 text-[10px] font-mono text-[#71717A]">
+        <span>⚡</span>
+        <span>TEST MODE · No actual funds are charged or settled</span>
+      </div>
+
       {statusMessage && (
         <div className="text-xs font-mono text-center px-3 py-1.5 panel-recessed rounded text-[#D4D4D8]">
           {statusMessage}
