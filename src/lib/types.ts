@@ -10,7 +10,8 @@ export type FailureCode =
   | 'payment_error'
   | 'db_error'
   | 'unauthorized_error'
-  | 'rate_limited';
+  | 'rate_limited'
+  | 'not_found';
 
 export interface AppError {
   readonly code: FailureCode;

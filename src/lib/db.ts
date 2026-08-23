@@ -705,14 +705,10 @@ export async function getUserProfileById(
 
   const clientResult = getSupabaseAdminClient();
   if (!clientResult.ok) {
-    const fallbackProfile = {
-      id: userId,
-      role: 'operator' as const,
-      companyId: DEFAULT_COMPANY_ID,
-      createdAt: new Date().toISOString(),
+    return {
+      ok: false,
+      error: { code: 'db_error', message: clientResult.error.message },
     };
-    inMemoryProfiles.set(userId, fallbackProfile);
-    return { ok: true, data: fallbackProfile };
   }
 
   const supabase = clientResult.data;
@@ -725,14 +721,10 @@ export async function getUserProfileById(
       .single();
 
     if (error || !data) {
-      const defaultProfile = {
-        id: userId,
-        role: 'operator' as const,
-        companyId: DEFAULT_COMPANY_ID,
-        createdAt: new Date().toISOString(),
+      return {
+        ok: false,
+        error: { code: 'not_found', message: 'User profile record not found' },
       };
-      inMemoryProfiles.set(userId, defaultProfile);
-      return { ok: true, data: defaultProfile };
     }
 
     const profile = {
@@ -744,13 +736,10 @@ export async function getUserProfileById(
     inMemoryProfiles.set(userId, profile);
     return { ok: true, data: profile };
   } catch {
-    const fallbackProfile = {
-      id: userId,
-      role: 'operator' as const,
-      companyId: DEFAULT_COMPANY_ID,
-      createdAt: new Date().toISOString(),
+    return {
+      ok: false,
+      error: { code: 'db_error', message: 'Error retrieving user profile from database' },
     };
-    return { ok: true, data: fallbackProfile };
   }
 }
 

@@ -24,15 +24,21 @@ export async function getCurrentUser(): Promise<Result<AuthenticatedUser, AppErr
     }
 
     const email = user.email || '';
+    const metadataRole = user.user_metadata?.role as UserRole | undefined;
+    const metadataCompanyId = user.user_metadata?.company_id as string | undefined;
+
     const profileResult = await getUserProfileById(user.id);
-    const role: UserRole =
-      profileResult.ok && profileResult.data.role
-        ? profileResult.data.role
-        : (user.user_metadata?.role as UserRole) || 'operator';
-    const companyId: string =
-      profileResult.ok && profileResult.data.companyId
-        ? profileResult.data.companyId
-        : (user.user_metadata?.company_id as string) || '00000000-0000-0000-0000-000000000001';
+    let role: UserRole = 'operator';
+    let companyId = metadataCompanyId || '00000000-0000-0000-0000-000000000001';
+
+    if (profileResult.ok && profileResult.data) {
+      role = profileResult.data.role;
+      companyId = profileResult.data.companyId || companyId;
+    } else if (metadataRole) {
+      role = metadataRole;
+      // Auto-sync profile to database in background
+      upsertUserProfile({ userId: user.id, role, email, companyId }).catch(() => {});
+    }
 
     return {
       ok: true,

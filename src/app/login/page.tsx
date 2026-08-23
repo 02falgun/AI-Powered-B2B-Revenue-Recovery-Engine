@@ -27,6 +27,13 @@ function LoginForm() {
     setLoading(true);
     setError(null);
 
+    // If attempting demo accounts, route via demo provisioning endpoint to ensure user exists
+    if (email === 'admin@acmecorp.com' || email === 'operator@acmecorp.com') {
+      const role = email.startsWith('admin') ? 'admin' : 'operator';
+      await handleInstantDemoLogin(role);
+      return;
+    }
+
     try {
       const supabase = createClient();
       const { error: authError } = await supabase.auth.signInWithPassword({
@@ -48,10 +55,38 @@ function LoginForm() {
     }
   }
 
-  function handleDemoFill(demoEmail: string) {
-    setEmail(demoEmail);
-    setPassword('RecoverAI2026!');
+  async function handleInstantDemoLogin(role: 'admin' | 'operator') {
+    setLoading(true);
     setError(null);
+    setEmail(role === 'admin' ? 'admin@acmecorp.com' : 'operator@acmecorp.com');
+    setPassword('RecoverAI2026!');
+
+    try {
+      const res = await fetch('/api/auth/demo-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Also perform client-side sign-in to ensure browser client state is hydrated
+        const supabase = createClient();
+        await supabase.auth.signInWithPassword({
+          email: role === 'admin' ? 'admin@acmecorp.com' : 'operator@acmecorp.com',
+          password: 'RecoverAI2026!',
+        }).catch(() => {});
+
+        router.push(redirectPath);
+        router.refresh();
+      } else {
+        setError(data.error?.message || 'Failed to initialize demo account.');
+        setLoading(false);
+      }
+    } catch {
+      setError('Network failure connecting to demo authorization.');
+      setLoading(false);
+    }
   }
 
   return (
@@ -133,27 +168,37 @@ function LoginForm() {
             </button>
           </form>
 
-          {/* Preset Demo Access Buttons */}
+          {/* Instant 1-Click Demo Login Buttons */}
           <div className="pt-4 border-t border-[#26262B] space-y-3">
             <span className="text-[10px] font-mono uppercase tracking-wider text-[#71717A] font-bold block text-center">
-              DEMO CREDENTIAL INJECTION
+              INSTANT DEMO AUTHENTICATION
             </span>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => handleDemoFill('admin@acmecorp.com')}
-                className="btn-mechanical-secondary p-2.5 rounded text-left text-xs"
+                disabled={loading}
+                onClick={() => handleInstantDemoLogin('admin')}
+                className="btn-mechanical-secondary p-3 rounded text-left text-xs disabled:opacity-40 group"
               >
-                <div className="font-bold text-[#FAFAFA]">Admin Role</div>
-                <div className="text-[10px] text-[#71717A] font-mono">admin@acmecorp.com</div>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[#FAFAFA]">Admin Role</span>
+                  <span className="text-[10px] text-[#71717A] group-hover:text-[#FAFAFA] font-mono">→</span>
+                </div>
+                <div className="text-[10px] text-[#71717A] font-mono mt-0.5">admin@acmecorp.com</div>
+                <div className="text-[9px] text-[#A1A1AA] mt-1 font-mono">Full Override Privileges</div>
               </button>
               <button
                 type="button"
-                onClick={() => handleDemoFill('operator@acmecorp.com')}
-                className="btn-mechanical-secondary p-2.5 rounded text-left text-xs"
+                disabled={loading}
+                onClick={() => handleInstantDemoLogin('operator')}
+                className="btn-mechanical-secondary p-3 rounded text-left text-xs disabled:opacity-40 group"
               >
-                <div className="font-bold text-[#FAFAFA]">Operator Role</div>
-                <div className="text-[10px] text-[#71717A] font-mono">operator@acmecorp.com</div>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[#FAFAFA]">Operator Role</span>
+                  <span className="text-[10px] text-[#71717A] group-hover:text-[#FAFAFA] font-mono">→</span>
+                </div>
+                <div className="text-[10px] text-[#71717A] font-mono mt-0.5">operator@acmecorp.com</div>
+                <div className="text-[9px] text-[#A1A1AA] mt-1 font-mono">Standard Processing</div>
               </button>
             </div>
           </div>

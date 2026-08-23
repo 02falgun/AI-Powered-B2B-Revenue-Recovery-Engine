@@ -52,12 +52,36 @@ export default function SignupPage() {
         return;
       }
 
+      // Explicitly persist role to user_profiles table via server endpoint
+      if (data.user?.id) {
+        await fetch('/api/auth/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: data.user.id,
+            role,
+            email,
+          }),
+        }).catch(() => {});
+      }
+
       if (data.session) {
         router.push('/');
         router.refresh();
       } else {
-        setSuccessMessage('Registration successful! Please sign in with your credentials.');
-        setLoading(false);
+        // Attempt automatic sign-in
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (!signInError) {
+          router.push('/');
+          router.refresh();
+        } else {
+          setSuccessMessage('Registration successful! Please sign in with your credentials.');
+          setLoading(false);
+        }
       }
     } catch {
       setError('Network failure during registration.');

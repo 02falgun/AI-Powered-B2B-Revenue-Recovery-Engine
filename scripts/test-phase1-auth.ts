@@ -185,6 +185,27 @@ async function runPhase1AuthTests(): Promise<void> {
     fetchedAdmin.ok && fetchedAdmin.data.role === 'admin',
   );
 
+  // 3.4 Demo Admin & Operator Role Verification
+  const demoAdminProfile = await upsertUserProfile({
+    userId: 'demo-admin-test-id',
+    role: 'admin',
+    email: 'admin@acmecorp.com',
+  });
+  assert(
+    'Demo Admin profile successfully initialized with role="admin"',
+    demoAdminProfile.ok && demoAdminProfile.data.role === 'admin',
+  );
+
+  const demoOperatorProfile = await upsertUserProfile({
+    userId: 'demo-operator-test-id',
+    role: 'operator',
+    email: 'operator@acmecorp.com',
+  });
+  assert(
+    'Demo Operator profile successfully initialized with role="operator"',
+    demoOperatorProfile.ok && demoOperatorProfile.data.role === 'operator',
+  );
+
   // ---------------------------------------------------------------------------
   // 4. Admin Manual Override on HUMAN_REVIEW Cases
   // ---------------------------------------------------------------------------
