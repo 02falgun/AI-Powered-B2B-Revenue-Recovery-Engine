@@ -190,13 +190,22 @@ export function RazorpayCheckoutButton({
           <>
             <span aria-hidden="true">💳</span>
             <span>{buttonText}</span>
+            {/* Inline Test Mode pill — always visible on the button face */}
+            <span
+              className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider"
+              style={{ backgroundColor: '#d97706', color: '#0D0D0E' }}
+              aria-label="Test Mode — no real funds charged"
+            >
+              TEST
+            </span>
           </>
         )}
       </button>
 
-      <div className="flex items-center justify-center gap-1.5 text-[10px] font-mono text-[#71717A]">
-        <span>⚡</span>
-        <span>TEST MODE · No actual funds are charged or settled</span>
+      {/* Supplementary footnote — belt-and-suspenders reinforcement */}
+      <div className="flex items-center justify-center gap-1.5 text-[10px] font-mono" style={{ color: '#d97706' }}>
+        <span aria-hidden="true">⚠</span>
+        <span>TEST MODE — No actual funds are charged or settled</span>
       </div>
 
       {statusMessage && (

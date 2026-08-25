@@ -172,7 +172,7 @@ function generateMarkdownReport(
     rowsMd += `| ${tc.id} | ${tc.name} | \`${tc.expected.intent}\` | \`${actualIntent}\` | ${expectedAmountStr} | ${actualAmountStr} | \`${tc.expected.decision}\` | \`${pol.decision}\` | ${statusMark} |\n`;
   }
 
-  return `# RecoverAI — Phase 7 Formal Evaluation & Safety Benchmark Report
+  return `# RecoverAI — Phase P9 Expanded Formal Evaluation & Safety Benchmark Report (100 Cases)
 
 Generated at: \`${dateStr}\`
 
@@ -191,7 +191,7 @@ Generated at: \`${dateStr}\`
 
 ---
 
-## 🔬 20 Synthetic Email Benchmark Cases
+## 🔬 100 Synthetic & Real-World Phrasing Benchmark Cases
 
 | Case ID | Test Case Name | Expected Intent | Actual Intent | Expected Amount | Actual Amount | Expected Decision | Actual Decision | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |

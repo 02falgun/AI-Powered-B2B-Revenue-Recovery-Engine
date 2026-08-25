@@ -191,8 +191,52 @@ export async function checkProcessEmailRateLimit(
 }
 
 /**
+ * Rate limiter for administrative data purge requests (/api/admin/purge-company).
+ * Limits admin purge actions to 5 per hour per admin user.
+ */
+export async function checkAdminPurgeRateLimit(
+  adminId: string,
+): Promise<RateLimitCheckResult> {
+  const limit = 5;
+  const windowMs = 3600000; // 1 hour
+  const key = `purge_${adminId || 'anonymous_admin'}`;
+
+  const { userLimiter } = getUpstashRatelimiters();
+  if (userLimiter) {
+    try {
+      const res = await userLimiter.limit(key);
+      if (!res.success) {
+        const retryAfter = Math.max(1, Math.ceil((res.reset - Date.now()) / 1000));
+        return {
+          success: false,
+          limit: res.limit,
+          remaining: res.remaining,
+          reset: res.reset,
+          scope: 'user',
+          retryAfterSeconds: retryAfter,
+        };
+      }
+      return {
+        success: true,
+        limit: res.limit,
+        remaining: res.remaining,
+        reset: res.reset,
+        scope: 'user',
+        retryAfterSeconds: 0,
+      };
+    } catch {
+      // fallback
+    }
+  }
+
+  const mem = checkMemorySlidingWindow(key, limit, windowMs);
+  return { ...mem, scope: 'user' };
+}
+
+/**
  * Resets memory rate limit store (used in tests).
  */
 export function resetMemoryRateLimitStore(): void {
   memoryStore.clear();
 }
+

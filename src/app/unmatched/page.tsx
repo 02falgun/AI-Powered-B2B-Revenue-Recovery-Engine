@@ -233,31 +233,45 @@ export default function UnmatchedQueuePage() {
                 </div>
 
                 {/* Assignment Controls */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
-                  <div className="flex-1 max-w-md">
-                    <select
-                      value={selectedInvoiceMap[job.id] || ''}
-                      onChange={(e) =>
-                        setSelectedInvoiceMap({ ...selectedInvoiceMap, [job.id]: e.target.value })
-                      }
-                      className="w-full panel-recessed rounded px-3 py-2 text-xs text-[#FAFAFA] border border-[#383840] focus:border-[#FAFAFA] focus:outline-none font-mono"
-                    >
-                      <option value="">-- Select Target Overdue Invoice --</option>
-                      {invoices.map((inv) => (
-                        <option key={inv.id} value={inv.id}>
-                          {inv.invoiceNumber} - {inv.customerName} (₹{(inv.outstandingAmountPaise / 100).toFixed(2)})
-                        </option>
-                      ))}
-                    </select>
+                <div className="flex flex-col gap-3 pt-2">
+                  {/* Test Mode notice — this action routes to the payment policy pipeline */}
+                  <div
+                    className="flex items-center gap-2 px-3 py-1.5 rounded text-[11px] font-mono"
+                    style={{ backgroundColor: '#451a03', borderLeft: '3px solid #d97706', color: '#fbbf24' }}
+                    aria-label="Test Mode active — linking will trigger simulated payment processing only"
+                  >
+                    <span aria-hidden="true" style={{ color: '#d97706' }}>⚠</span>
+                    <span>
+                      <strong style={{ color: '#fde68a' }}>TEST MODE:</strong> Linking triggers the policy pipeline &amp; may generate a Razorpay Test payment link. No real funds settle.
+                    </span>
                   </div>
 
-                  <button
-                    onClick={() => handleLinkEmail(job.id)}
-                    disabled={assigningId === job.id || !selectedInvoiceMap[job.id]}
-                    className="btn-mechanical-primary px-4 py-2 rounded text-xs disabled:opacity-40"
-                  >
-                    {assigningId === job.id ? 'Linking...' : 'Link to Invoice & Queue'}
-                  </button>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                    <div className="flex-1 max-w-md">
+                      <select
+                        value={selectedInvoiceMap[job.id] || ''}
+                        onChange={(e) =>
+                          setSelectedInvoiceMap({ ...selectedInvoiceMap, [job.id]: e.target.value })
+                        }
+                        className="w-full panel-recessed rounded px-3 py-2 text-xs text-[#FAFAFA] border border-[#383840] focus:border-[#FAFAFA] focus:outline-none font-mono"
+                      >
+                        <option value="">-- Select Target Overdue Invoice --</option>
+                        {invoices.map((inv) => (
+                          <option key={inv.id} value={inv.id}>
+                            {inv.invoiceNumber} - {inv.customerName} (₹{(inv.outstandingAmountPaise / 100).toFixed(2)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={() => handleLinkEmail(job.id)}
+                      disabled={assigningId === job.id || !selectedInvoiceMap[job.id]}
+                      className="btn-mechanical-primary px-4 py-2 rounded text-xs disabled:opacity-40"
+                    >
+                      {assigningId === job.id ? 'Linking...' : 'Link to Invoice & Queue'}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

@@ -27,7 +27,7 @@
 | **B7** | Fail-closed on AI errors with operator notice | **PASS** | Evaluated with timeout (`timeoutMs: 1`) → returns `HUMAN_REVIEW` with plain-language operator explanation. |
 | **B8** | Every submission produces audit log entry | **PASS** | Verified in `scripts/test-orchestration.ts` and `src/lib/db.ts` with in-memory resilient fallback. |
 | **B9** | Test Mode payment updates balance exactly once (idempotent) | **PASS** | `npm run test:idempotency` verified dual-path payment execution (`verify-payment` + webhook replay) updates balance exactly once. |
-| **B10** | 20-email evaluation benchmark verified & synced | **PASS** | `npm run test:eval` executed 20/20 cases → **100.0% Policy Decision Accuracy**, **12/12 (100.0%) Safety Metric**. |
+| **B10** | 100-email expanded evaluation benchmark verified & synced | **PASS** | `npm run test:eval` executed 100/100 cases → **86.0% Policy Decision Accuracy**, **58/58 (100.0%) Primary Safety Metric**. |
 | **C1** | Full test suite passes on clean run | **PASS** | `npm test` passed 100% across all unit, integration, and evaluation suites. |
 | **C2** | Phase 4 reliability scenarios pass (5/5) | **PASS** | `npm run test:phase4` passed 5/5 (AI timeout, malformed AI output, Razorpay error, invalid webhook signature, replay). |
 | **C3** | Phase 6 adversarial scenarios pass (12/12) | **PASS** | `npm run test:phase6` passed 12/12 (overpayment, negative amount, currency ambiguity, prompt injection, etc.). |
